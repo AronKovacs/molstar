@@ -51,8 +51,8 @@ function occlusionStyle(plugin: PluginContext) {
                 bias: 1.0,
                 blurKernelSize: 13
             } },
-            outline: { name: 'on', params: {
-                scale: 1.0,
+            outline: { name: 'staticWidth', params: {
+                width: 1.0,
                 threshold: 0.33
             } }
         }

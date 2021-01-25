@@ -13,13 +13,14 @@ import { Texture } from '../../mol-gl/webgl/texture';
 import { ValueCell } from '../../mol-util';
 import { createComputeRenderItem } from '../../mol-gl/webgl/render-item';
 import { createComputeRenderable, ComputeRenderable } from '../../mol-gl/renderable';
-import { Mat4, Vec2, Vec3 } from '../../mol-math/linear-algebra';
+import { Mat4, Vec2, Vec3, Vec4 } from '../../mol-math/linear-algebra';
 import { ParamDefinition as PD } from '../../mol-util/param-definition';
 import { RenderTarget } from '../../mol-gl/webgl/render-target';
 import { DrawPass } from './draw';
 import { ICamera } from '../../mol-canvas3d/camera';
 import quad_vert from '../../mol-gl/shader/quad.vert';
 import outlines_frag from '../../mol-gl/shader/outlines.frag';
+import outlines_jfa_step_frag from '../../mol-gl/shader/outlines-jfa-step.frag';
 import ssao_frag from '../../mol-gl/shader/ssao.frag';
 import ssao_blur_frag from '../../mol-gl/shader/ssao-blur.frag';
 import postprocessing_frag from '../../mol-gl/shader/postprocessing.frag';
@@ -37,6 +38,9 @@ const OutlinesSchema = {
     uNear: UniformSpec('f'),
     uFar: UniformSpec('f'),
 
+    dOutlineDynamicWidth: DefineSpec('number'),
+    uInvProjection: UniformSpec('m4'),
+
     uMaxPossibleViewZDiff: UniformSpec('f'),
 };
 type OutlinesRenderable = ComputeRenderable<Values<typeof OutlinesSchema>>
@@ -51,11 +55,39 @@ function getOutlinesRenderable(ctx: WebGLContext, depthTexture: Texture): Outlin
         uNear: ValueCell.create(1),
         uFar: ValueCell.create(10000),
 
+        dOutlineDynamicWidth: ValueCell.create(5),
+        uInvProjection: ValueCell.create(Mat4.identity()),
+
         uMaxPossibleViewZDiff: ValueCell.create(0.5),
     };
 
     const schema = { ...OutlinesSchema };
     const shaderCode = ShaderCode('outlines', quad_vert, outlines_frag);
+    const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
+
+    return createComputeRenderable(renderItem, values);
+}
+
+const OutlinesJfaSchema = {
+    ...QuadSchema,
+    tOutlines: TextureSpec('texture', 'rgba', 'float', 'nearest'),
+    uTexSize: UniformSpec('v2'),
+    uStep: UniformSpec('v2'),
+    uOutlineViewRadius: UniformSpec('f'),
+};
+type OutlinesJfaRenderable = ComputeRenderable<Values<typeof OutlinesJfaSchema>>
+
+function getOutlinesJfaRenderable(ctx: WebGLContext, outlineTexture: Texture): OutlinesJfaRenderable {
+    const values: Values<typeof OutlinesJfaSchema> = {
+        ...QuadValues,
+        tOutlines: ValueCell.create(outlineTexture),
+        uTexSize: ValueCell.create(Vec2.create(outlineTexture.getWidth(), outlineTexture.getHeight())),
+        uStep: ValueCell.create(Vec2.create(0, 0)),
+        uOutlineViewRadius: ValueCell.create(0.0001),
+    };
+
+    const schema = { ...OutlinesJfaSchema };
+    const shaderCode = ShaderCode('outlines-jfa', quad_vert, outlines_jfa_step_frag);
     const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
 
     return createComputeRenderable(renderItem, values);
@@ -196,6 +228,7 @@ const PostprocessingSchema = {
     dOcclusionEnable: DefineSpec('boolean'),
 
     dOutlineEnable: DefineSpec('boolean'),
+    dOutlineDynamicWidth: DefineSpec('number'),
     dOutlineScale: DefineSpec('number'),
     uOutlineThreshold: UniformSpec('f'),
 };
@@ -223,6 +256,7 @@ function getPostprocessingRenderable(ctx: WebGLContext, colorTexture: Texture, d
         dOcclusionEnable: ValueCell.create(false),
 
         dOutlineEnable: ValueCell.create(false),
+        dOutlineDynamicWidth: ValueCell.create(1),
         dOutlineScale: ValueCell.create(1),
         uOutlineThreshold: ValueCell.create(0.33),
     };
@@ -245,12 +279,16 @@ export const PostprocessingParams = {
         off: PD.Group({})
     }, { cycle: true, description: 'Darken occluded crevices with the ambient occlusion effect' }),
     outline: PD.MappedStatic('off', {
-        on: PD.Group({
-            scale: PD.Numeric(1, { min: 1, max: 5, step: 1 }),
+        staticWidth: PD.Group({
+            width: PD.Numeric(1, { min: 1, max: 5, step: 1 }, { description: 'Width in pixels.' }),
+            threshold: PD.Numeric(0.33, { min: 0.01, max: 1, step: 0.01 }),
+        }),
+        dynamicWidth: PD.Group({
+            width: PD.Numeric(0.1, { min: 0.01, max: 5, step: 0.01 }, { description: 'Width in angstroms.' }),
             threshold: PD.Numeric(0.33, { min: 0.01, max: 1, step: 0.01 }),
         }),
         off: PD.Group({})
-    }, { cycle: true, description: 'Draw outline around 3D objects' }),
+    }, { description: 'Draw outline around 3D objects' }),
     antialiasing: PD.MappedStatic('smaa', {
         fxaa: PD.Group(FxaaParams),
         smaa: PD.Group(SmaaParams),
@@ -261,13 +299,18 @@ export type PostprocessingProps = PD.Values<typeof PostprocessingParams>
 
 export class PostprocessingPass {
     static isEnabled(props: PostprocessingProps) {
-        return props.occlusion.name === 'on' || props.outline.name === 'on';
+        return props.occlusion.name === 'on' || props.outline.name !== 'off';
     }
 
     readonly target: RenderTarget
 
     private readonly outlinesTarget: RenderTarget
     private readonly outlinesRenderable: OutlinesRenderable
+
+    private readonly outlinesJfaATarget: RenderTarget
+    private readonly outlinesJfaBTarget: RenderTarget
+    private readonly outlinesJfaARenderable: OutlinesJfaRenderable
+    private readonly outlinesJfaBRenderable: OutlinesJfaRenderable
 
     private readonly randomHemisphereVector: Vec3[]
     private readonly ssaoFramebuffer: Framebuffer
@@ -284,6 +327,8 @@ export class PostprocessingPass {
     private nSamples: number
     private blurKernelSize: number
 
+    private maxPixelViewRadius: number
+
     private readonly renderable: PostprocessingRenderable
 
     constructor(private webgl: WebGLContext, drawPass: DrawPass) {
@@ -293,11 +338,17 @@ export class PostprocessingPass {
 
         this.nSamples = 1;
         this.blurKernelSize = 1;
+        this.maxPixelViewRadius = 1;
 
         this.target = webgl.createRenderTarget(width, height, false, 'uint8', 'linear');
 
         this.outlinesTarget = webgl.createRenderTarget(width, height, false);
         this.outlinesRenderable = getOutlinesRenderable(webgl, depthTexture);
+
+        this.outlinesJfaATarget = webgl.createRenderTarget(width, height, false, 'float32', 'nearest');
+        this.outlinesJfaBTarget = webgl.createRenderTarget(width, height, false, 'float32', 'nearest');
+        this.outlinesJfaARenderable = getOutlinesJfaRenderable(webgl, this.outlinesJfaATarget.texture);
+        this.outlinesJfaBRenderable = getOutlinesJfaRenderable(webgl, this.outlinesJfaBTarget.texture);
 
         this.randomHemisphereVector = [];
         for (let i = 0; i < 256; i++) {
@@ -334,11 +385,15 @@ export class PostprocessingPass {
         if (width !== w || height !== h) {
             this.target.setSize(width, height);
             this.outlinesTarget.setSize(width, height);
+            this.outlinesJfaATarget.setSize(width, height);
+            this.outlinesJfaBTarget.setSize(width, height);
             this.ssaoDepthTexture.define(width, height);
             this.ssaoDepthBlurProxyTexture.define(width, height);
 
             ValueCell.update(this.renderable.values.uTexSize, Vec2.set(this.renderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.outlinesRenderable.values.uTexSize, Vec2.set(this.outlinesRenderable.values.uTexSize.ref.value, width, height));
+            ValueCell.update(this.outlinesJfaARenderable.values.uTexSize, Vec2.set(this.outlinesJfaARenderable.values.uTexSize.ref.value, width, height));
+            ValueCell.update(this.outlinesJfaBRenderable.values.uTexSize, Vec2.set(this.outlinesJfaBRenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.ssaoRenderable.values.uTexSize, Vec2.set(this.ssaoRenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.ssaoBlurFirstPassRenderable.values.uTexSize, Vec2.set(this.ssaoRenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.ssaoBlurSecondPassRenderable.values.uTexSize, Vec2.set(this.ssaoRenderable.values.uTexSize.ref.value, width, height));
@@ -346,16 +401,26 @@ export class PostprocessingPass {
     }
 
     private updateState(camera: ICamera, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
+        const { x, y, width, height } = camera.viewport;
+
+        const orthographic = camera.state.mode === 'orthographic' ? 1 : 0;
+        const outlinesEnabled = props.outline.name !== 'off';
+        const outlinesDynamicWidth = props.outline.name === 'dynamicWidth' ? 1 : 0;
+        const occlusionEnabled = props.occlusion.name === 'on';
+
         let needsUpdateMain = false;
+        let needsUpdateOutlines = false;
         let needsUpdateSsao = false;
         let needsUpdateSsaoBlur = false;
 
-        const orthographic = camera.state.mode === 'orthographic' ? 1 : 0;
-        const outlinesEnabled = props.outline.name === 'on';
-        const occlusionEnabled = props.occlusion.name === 'on';
-
         let invProjection = Mat4.identity();
         Mat4.invert(invProjection, camera.projection);
+
+        let coord0 = Vec4.create(-1, -1 + 1 / height, -1, 1.0);
+        let coord1 = Vec4.create(-1 + 2 / width, -1 + 1 / height, -1, 1.0);
+        Vec4.transformMat4(coord0, coord0, invProjection);
+        Vec4.transformMat4(coord1, coord1, invProjection);
+        this.maxPixelViewRadius = Math.abs((coord0[0] / coord0[3]) - (coord1[0] / coord1[3]));
 
         if (props.occlusion.name === 'on') {
             ValueCell.updateIfChanged(this.ssaoRenderable.values.uProjection, camera.projection);
@@ -366,6 +431,10 @@ export class PostprocessingPass {
 
             ValueCell.updateIfChanged(this.ssaoBlurFirstPassRenderable.values.uFar, camera.far);
             ValueCell.updateIfChanged(this.ssaoBlurSecondPassRenderable.values.uFar, camera.far);
+
+            let maxPossibleViewZDiff = props.occlusion.params.radius / 16;
+            ValueCell.updateIfChanged(this.ssaoBlurFirstPassRenderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
+            ValueCell.updateIfChanged(this.ssaoBlurSecondPassRenderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
 
             if (this.ssaoBlurFirstPassRenderable.values.dOrthographic.ref.value !== orthographic) { needsUpdateSsaoBlur = true; }
             ValueCell.updateIfChanged(this.ssaoBlurFirstPassRenderable.values.dOrthographic, orthographic);
@@ -395,19 +464,30 @@ export class PostprocessingPass {
 
         }
 
-        if (props.outline.name === 'on') {
+        if (props.outline.name !== 'off') {
             const factor = Math.pow(1000, props.outline.params.threshold) / 1000;
             const maxPossibleViewZDiff = factor * (camera.far - camera.near);
-            const outlineScale = props.outline.params.scale - 1;
+            const outlinePixelWidth = props.outline.params.width - 1;
+            const outlineViewWidth = props.outline.params.width;
 
             ValueCell.updateIfChanged(this.outlinesRenderable.values.uNear, camera.near);
             ValueCell.updateIfChanged(this.outlinesRenderable.values.uFar, camera.far);
             ValueCell.updateIfChanged(this.outlinesRenderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
+            ValueCell.updateIfChanged(this.outlinesRenderable.values.uInvProjection, invProjection);
+            if (this.outlinesRenderable.values.dOrthographic.ref.value !== orthographic) { needsUpdateOutlines = true; }
+            ValueCell.updateIfChanged(this.outlinesRenderable.values.dOrthographic, orthographic);
+            if (this.outlinesRenderable.values.dOutlineDynamicWidth.ref.value !== outlinesDynamicWidth) { needsUpdateOutlines = true; }
+            ValueCell.updateIfChanged(this.outlinesRenderable.values.dOutlineDynamicWidth, outlinesDynamicWidth);
+
+            ValueCell.updateIfChanged(this.outlinesJfaARenderable.values.uOutlineViewRadius, outlineViewWidth);
+            ValueCell.updateIfChanged(this.outlinesJfaBRenderable.values.uOutlineViewRadius, outlineViewWidth);
 
             ValueCell.updateIfChanged(this.renderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
             ValueCell.updateIfChanged(this.renderable.values.uOutlineThreshold, props.outline.params.threshold);
-            if (this.renderable.values.dOutlineScale.ref.value !== outlineScale) { needsUpdateMain = true; }
-            ValueCell.updateIfChanged(this.renderable.values.dOutlineScale, outlineScale);
+            if (this.renderable.values.dOutlineDynamicWidth.ref.value !== outlinesDynamicWidth) { needsUpdateMain = true; }
+            ValueCell.updateIfChanged(this.renderable.values.dOutlineDynamicWidth, outlinesDynamicWidth);
+            if (this.renderable.values.dOutlineScale.ref.value !== outlinePixelWidth) { needsUpdateMain = true; }
+            ValueCell.updateIfChanged(this.renderable.values.dOutlineScale, outlinePixelWidth);
         }
 
         ValueCell.updateIfChanged(this.renderable.values.uFar, camera.far);
@@ -422,6 +502,10 @@ export class PostprocessingPass {
         ValueCell.updateIfChanged(this.renderable.values.dOutlineEnable, outlinesEnabled);
         if (this.renderable.values.dOcclusionEnable.ref.value !== occlusionEnabled) { needsUpdateMain = true; }
         ValueCell.updateIfChanged(this.renderable.values.dOcclusionEnable, occlusionEnabled);
+
+        if (needsUpdateOutlines) {
+            this.outlinesRenderable.update();
+        }
 
         if (needsUpdateSsao) {
             this.ssaoRenderable.update();
@@ -443,17 +527,88 @@ export class PostprocessingPass {
         state.disable(gl.DEPTH_TEST);
         state.depthMask(false);
 
-        const { x, y, width, height } = camera.viewport;
         gl.viewport(x, y, width, height);
         gl.scissor(x, y, width, height);
+    }
+
+    _dynamicWidthOutlines(): Texture {
+        const width = this.outlinesJfaATarget.getWidth();
+        const height = this.outlinesJfaATarget.getHeight();
+
+        // create outlines
+        this.outlinesJfaATarget.bind();
+        this.outlinesRenderable.render();
+
+        // jfa
+        let stepNormalized = Vec2();
+        let readingA = true;
+
+        for (let i = 0; i < 1; i++) {
+            Vec2.set(stepNormalized, 1 / width, 1 / height);
+            if (readingA) {
+                this.outlinesJfaBTarget.bind();
+                ValueCell.update(this.outlinesJfaARenderable.values.uStep, stepNormalized);
+                this.outlinesJfaARenderable.render();
+            } else {
+                this.outlinesJfaATarget.bind();
+                ValueCell.update(this.outlinesJfaBRenderable.values.uStep, stepNormalized);
+                this.outlinesJfaBRenderable.render();
+            }
+            readingA = !readingA;
+        }
+
+        let stepPixels = Math.ceil(this.outlinesJfaARenderable.values.uOutlineViewRadius.ref.value / this.maxPixelViewRadius) + 1;
+        while (true) {
+            Vec2.set(stepNormalized, stepPixels / width, stepPixels / height);
+            if (readingA) {
+                this.outlinesJfaBTarget.bind();
+                ValueCell.update(this.outlinesJfaARenderable.values.uStep, stepNormalized);
+                this.outlinesJfaARenderable.render();
+            } else {
+                this.outlinesJfaATarget.bind();
+                ValueCell.update(this.outlinesJfaBRenderable.values.uStep, stepNormalized);
+                this.outlinesJfaBRenderable.render();
+            }
+            readingA = !readingA;
+            if (stepPixels <= 1) {
+                break;
+            }
+            stepPixels = Math.ceil(stepPixels / 2);
+        }
+
+        for (let i = 0; i < 1; i++) {
+            Vec2.set(stepNormalized, 1 / width, 1 / height);
+            if (readingA) {
+                this.outlinesJfaBTarget.bind();
+                ValueCell.update(this.outlinesJfaARenderable.values.uStep, stepNormalized);
+                this.outlinesJfaARenderable.render();
+            } else {
+                this.outlinesJfaATarget.bind();
+                ValueCell.update(this.outlinesJfaBRenderable.values.uStep, stepNormalized);
+                this.outlinesJfaBRenderable.render();
+            }
+            readingA = !readingA;
+        }
+
+        return readingA ? this.outlinesJfaATarget.texture : this.outlinesJfaBTarget.texture;
     }
 
     render(camera: ICamera, toDrawingBuffer: boolean, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
         this.updateState(camera, transparentBackground, backgroundColor, props);
 
-        if (props.outline.name === 'on') {
+        if (props.outline.name === 'staticWidth') {
             this.outlinesTarget.bind();
             this.outlinesRenderable.render();
+            if (this.renderable.values.tOutlines.ref.value !== this.outlinesTarget.texture) {
+                ValueCell.update(this.renderable.values.tOutlines, this.outlinesTarget.texture);
+                this.renderable.update();
+            }
+        } else if (props.outline.name === 'dynamicWidth') {
+            let outlines = this._dynamicWidthOutlines();
+            if (this.renderable.values.tOutlines.ref.value !== outlines) {
+                ValueCell.update(this.renderable.values.tOutlines, outlines);
+                this.renderable.update();
+            }
         }
 
         if (props.occlusion.name === 'on') {

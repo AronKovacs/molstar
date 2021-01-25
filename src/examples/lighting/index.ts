@@ -25,7 +25,7 @@ const Canvas3DPresets = {
         },
         postprocessing: {
             occlusion: { name: 'on', params: { samples: 64, radius: 8, bias: 1.0, blurKernelSize: 13 } },
-            outline: { name: 'on', params: { scale: 1, threshold: 0.33 } }
+            outline: { name: 'staticWidth', params: { width: 1, threshold: 0.33 } }
         },
         renderer: {
             ambientIntensity: 1,

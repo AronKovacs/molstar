@@ -51,6 +51,7 @@ bool isBackground(const in float depth) {
     return depth == 1.0;
 }
 
+#if dOutlineDynamicWidth != 1
 float getOutline(const in vec2 coords, out float closestTexel) {
     float backgroundViewZ = uFar + 3.0 * uMaxPossibleViewZDiff;
     vec2 invTexSize = 1.0 / uTexSize;
@@ -80,6 +81,7 @@ float getOutline(const in vec2 coords, out float closestTexel) {
     }
     return outline;
 }
+#endif
 
 float getSsao(vec2 coords) {
     float rawSsao = unpackRGToUnitInterval(texture2D(tSsaoDepth, coords).xy);
@@ -114,8 +116,14 @@ void main(void) {
 
     // outline needs to be handled after occlusion to keep them clean
     #ifdef dOutlineEnable
-        float closestTexel;
-        float outline = getOutline(coords, closestTexel);
+        #if dOutlineDynamicWidth == 1
+            vec4 outlineData = texture2D(tOutlines, coords);
+            float outline = outlineData.x >= 0.0 ? 0.0 : 1.0;
+            float closestTexel = outlineData.z;
+        #else
+            float closestTexel;
+            float outline = getOutline(coords, closestTexel);
+        #endif
 
         if (outline == 0.0) {
             color.rgb *= outline;
@@ -128,8 +136,6 @@ void main(void) {
             }
         }
     #endif
-
-
 
     gl_FragColor = color;
 }

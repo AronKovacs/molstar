@@ -459,6 +459,7 @@ namespace Canvas3D {
 
         function consoleStats() {
             console.table(scene.renderables.map(r => ({
+                id: r.id,
                 drawCount: r.values.drawCount.ref.value,
                 instanceCount: r.values.instanceCount.ref.value,
                 materialId: r.materialId,

@@ -88,6 +88,8 @@ export class DrawPass {
     private depthTextureVolumes: Texture
     private depthMerge: DepthMergeRenderable
 
+    readonly depthTargetCutaways: RenderTarget | null
+
     private copyFboTarget: CopyRenderable
     private copyFboPostprocessing: CopyRenderable
 
@@ -101,6 +103,8 @@ export class DrawPass {
 
     constructor(private webgl: WebGLContext, width: number, height: number, enableWboit: boolean) {
         const { extensions, resources } = webgl;
+
+        // webgl.waitForGpuCommandsCompleteSync();
 
         this.drawTarget = createNullRenderTarget(webgl.gl);
 
@@ -180,6 +184,25 @@ export class DrawPass {
     private _renderWboit(renderer: Renderer, camera: ICamera, scene: Scene, transparentBackground: boolean, postprocessingProps: PostprocessingProps) {
         if (!this.wboit?.supported) throw new Error('expected wboit to be supported');
 
+        const ligandId = 23;
+        let primitives = scene.primitives.renderables.concat();
+        let ligand = primitives.filter(r => r.id === ligandId);
+        let notLigand = primitives.filter(r => r.id !== ligandId);
+        let groupLigand: Scene.Group = {
+            renderables: ligand,
+            direction: scene.primitives.direction,
+            position: scene.primitives.position,
+            up: scene.primitives.up,
+            view: scene.primitives.view
+        };
+        let groupWithoutLigand: Scene.Group = {
+            renderables: notLigand,
+            direction: scene.primitives.direction,
+            position: scene.primitives.position,
+            up: scene.primitives.up,
+            view: scene.primitives.view
+        };
+
         this.colorTarget.bind();
         renderer.clear(true);
 
@@ -187,7 +210,7 @@ export class DrawPass {
         this.depthTexturePrimitives.attachFramebuffer(this.colorTarget.framebuffer, 'depth');
         this.colorTarget.bind();
         renderer.clearDepth();
-        renderer.renderWboitOpaque(scene.primitives, camera, null);
+        renderer.renderWboitOpaque(groupLigand, camera, null);
 
         // render opaque volumes
         this.depthTextureVolumes.attachFramebuffer(this.colorTarget.framebuffer, 'depth');

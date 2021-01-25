@@ -15,6 +15,8 @@ uniform vec2 uTexSize;
 uniform float uNear;
 uniform float uFar;
 
+uniform mat4 uInvProjection;
+
 uniform float uMaxPossibleViewZDiff;
 
 #include common
@@ -35,6 +37,12 @@ bool isBackground(const in float depth) {
     return depth == 1.0;
 }
 
+float getPixelViewSize(vec3 coords, vec2 invTexSize) {
+    float viewX1 = screenSpaceToViewSpace(coords - vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
+    float viewX2 = screenSpaceToViewSpace(coords + vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
+    return abs(viewX2 - viewX1);
+}
+
 void main(void) {
     float backgroundViewZ = uFar + 3.0 * uMaxPossibleViewZDiff;
 
@@ -47,6 +55,10 @@ void main(void) {
     float outline = 1.0;
     float bestDepth = 1.0;
 
+    #if dOutlineDynamicWidth == 1
+        float innerOutline = 1.0;
+    #endif
+
     for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
             vec2 sampleCoords = coords + vec2(float(x), float(y)) * invTexSize;
@@ -57,9 +69,25 @@ void main(void) {
                 outline = 0.0;
                 bestDepth = sampleDepth;
             }
+            /*
+            if (abs(selfViewZ - sampleViewZ) > uMaxPossibleViewZDiff && selfDepth < sampleDepth) {
+                outline = 0.0;
+                bestDepth = 0.01;
+            }
+            */
+            #if dOutlineDynamicWidth == 1
+                if (abs(selfViewZ - sampleViewZ) > uMaxPossibleViewZDiff && selfDepth < sampleDepth) {
+                    innerOutline = -1.0;
+                }
+            #endif
         }
     }
 
-    gl_FragColor = vec4(outline, packUnitIntervalToRG(bestDepth), 0.0);
+    #if dOutlineDynamicWidth == 1
+        vec3 screenCoords = vec3(coords, bestDepth);
+        gl_FragColor = vec4(outline == 0.0 ? vec4(screenCoords, getPixelViewSize(screenCoords, invTexSize)) : vec4(-1.0, -1.0, 1000.0, innerOutline));
+    #else
+        gl_FragColor = vec4(outline, packUnitIntervalToRG(bestDepth), 0.0);
+    #endif
 }
 `;
