@@ -48,7 +48,9 @@ export const CommonQueryParamsInfo: QueryParamInfo[] = [
     { name: 'encoding', type: QueryParamType.String, defaultValue: 'cif', description: `Determines the output encoding (text based 'CIF' or binary 'BCIF'). Ligands can also be exported as 'SDF', 'MOL', or 'MOL2'.`, supportedValues: ['cif', 'bcif', 'sdf', 'mol', 'mol2'] },
     { name: 'copy_all_categories', type: QueryParamType.Boolean, defaultValue: false, description: 'If true, copy all categories from the input file.' },
     { name: 'data_source', type: QueryParamType.String, defaultValue: '', description: 'Allows to control how the provided data source ID maps to input file (as specified by the server instance config).' },
-    { name: 'transform', type: QueryParamType.String, description: `Transformation to apply to coordinates in '_atom_site'. Accepts a 4x4 transformation matrix, provided as array of 16 float values.` }
+    { name: 'transform', type: QueryParamType.String, description: `Transformation to apply to coordinates in '_atom_site'. Accepts a 4x4 transformation matrix, provided as array of 16 float values.` },
+    { name: 'download', type: QueryParamType.Boolean, defaultValue: false, description: 'If true, browser will download text files.' },
+    { name: 'filename', type: QueryParamType.String, defaultValue: '', description: `Controls the filename for downloaded files. Will force download if specified.` }
 ];
 
 export type Encoding = 'cif' | 'bcif' | 'sdf' | 'mol' | 'mol2';
@@ -57,7 +59,9 @@ export interface CommonQueryParamsInfo {
     encoding?: Encoding,
     copy_all_categories?: boolean
     data_source?: string,
-    transform?: Mat4
+    transform?: Mat4,
+    download?: boolean,
+    filename?: string
 }
 
 export const AtomSiteSchemaElement = {
@@ -290,10 +294,19 @@ export function normalizeRestCommonParams(params: any): CommonQueryParamsInfo {
     return {
         model_nums: params.model_nums ? ('' + params.model_nums).split(',').map(n => n.trim()).filter(n => !!n).map(n => +n) : void 0,
         data_source: params.data_source,
-        copy_all_categories: Boolean(params.copy_all_categories),
+        copy_all_categories: isTrue(params.copy_all_categories),
         encoding: mapEncoding(('' + params.encoding).toLocaleLowerCase()),
-        transform: params.transform ? ('' + params.transform).split(',').map(n => n.trim()).map(n => +n) as Mat4 : Mat4.identity()
+        transform: params.transform ? ('' + params.transform).split(',').map(n => n.trim()).map(n => +n) as Mat4 : Mat4.identity(),
+        download: isTrue(params.download) || !!params.filename,
+        filename: params.filename
     };
+}
+
+function isTrue(val: any): boolean {
+    const b = Boolean(val);
+    if (!b) return false;
+    if (typeof val === 'string') return val !== '0' && val.toLowerCase() !== 'false';
+    return b;
 }
 
 function mapEncoding(value: string) {

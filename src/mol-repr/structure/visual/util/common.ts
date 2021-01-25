@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2018-2020 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2018-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
@@ -100,13 +100,13 @@ export function includesUnitKind(unitKinds: UnitKind[], unit: Unit) {
 
 //
 
-const MaxCells = 500_000_000;
+const DefaultMaxCells = 500_000_000;
 
 /** guard against overly high resolution for the given box size */
-export function ensureReasonableResolution<T>(box: Box3D, props: { resolution: number } & T) {
+export function ensureReasonableResolution<T>(box: Box3D, props: { resolution: number } & T, maxCells = DefaultMaxCells) {
     const volume = Box3D.volume(box);
     const approxCells = volume / props.resolution;
-    const resolution = approxCells > MaxCells ? volume / MaxCells : props.resolution;
+    const resolution = approxCells > maxCells ? volume / maxCells : props.resolution;
     return { ...props, resolution };
 }
 
@@ -159,7 +159,7 @@ export function getUnitConformationAndRadius(structure: Structure, unit: Unit, p
     let indices: SortedArray<ElementIndex>;
     let id: AssignableArrayLike<number>;
 
-    if (ignoreHydrogens || (includeParent && rootUnit !== unit)) {
+    if (ignoreHydrogens || traceOnly || (includeParent && rootUnit !== unit)) {
         const _indices = [];
         const _id = [];
         for (let i = 0, il = elements.length; i < il; ++i) {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2017-2020 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2017-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  * @author Michael Krone <michael.krone@uni-tuebingen.de>
@@ -14,6 +14,7 @@ precision highp int;
 
 #if dClipObjectCount != 0
     uniform int uClipObjectType[dClipObjectCount];
+    uniform bool uClipObjectInvert[dClipObjectCount];
     uniform vec3 uClipObjectPosition[dClipObjectCount];
     uniform vec4 uClipObjectRotation[dClipObjectCount];
     uniform vec3 uClipObjectScale[dClipObjectCount];
@@ -76,7 +77,7 @@ uniform vec3 uCellDim;
 uniform vec3 uCameraPosition;
 uniform mat4 uCartnToUnit;
 
-#if __VERSION__ == 300
+#if __VERSION__ != 100
     // for webgl1 this is given as a 'define'
     uniform int uMaxSteps;
 #endif
@@ -259,7 +260,7 @@ vec4 raymarch(vec3 startLoc, vec3 step, vec3 rayDir) {
                     #ifdef enabledFragDepth
                         return packDepthToRGBA(gl_FragDepthEXT);
                     #else
-                        return packDepthToRGBA(gl_FragCoord.z);
+                        return packDepthToRGBA(depth);
                     #endif
                 #elif defined(dRenderVariant_color)
                     #ifdef dPackedGroup
@@ -445,8 +446,9 @@ void main() {
     vec3 step = rayDir * uStepScale;
 
     float boundingSphereNear = distance(vBoundingSphere.xyz, uCameraPosition) - vBoundingSphere.w;
-    float d = max(uNear, boundingSphereNear);
-    gl_FragColor = raymarch(uCameraPosition + (d * rayDir), step, rayDir);
+    float d = max(uNear, boundingSphereNear) - mix(0.0, distance(vOrigPos, uCameraPosition), uIsOrtho);
+    vec3 start = mix(uCameraPosition, vOrigPos, uIsOrtho) + (d * rayDir);
+    gl_FragColor = raymarch(start, step, rayDir);
 
     #if defined(dRenderVariant_pick) || defined(dRenderVariant_depth)
         // discard when nothing was hit
@@ -458,7 +460,7 @@ void main() {
         #if defined(dRenderMode_isosurface) && defined(enabledFragDepth)
             float fragmentDepth = gl_FragDepthEXT;
         #else
-            float fragmentDepth = calcDepth((uView * vec4(uCameraPosition + (d * rayDir), 1.0)).xyz);
+            float fragmentDepth = calcDepth((uModelView * vec4(start, 1.0)).xyz);
         #endif
         float preFogAlpha = clamp(preFogAlphaBlended, 0.0, 1.0);
         interior = false;

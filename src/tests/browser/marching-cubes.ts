@@ -1,17 +1,17 @@
 /**
- * Copyright (c) 2019-2020 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2019-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
 
 import './index.html';
 import { resizeCanvas } from '../../mol-canvas3d/util';
-import { Canvas3DParams, Canvas3D } from '../../mol-canvas3d/canvas3d';
+import { Canvas3DParams, Canvas3D, Canvas3DContext } from '../../mol-canvas3d/canvas3d';
 import { ColorNames } from '../../mol-util/color/names';
 import { PositionData, Box3D, Sphere3D } from '../../mol-math/geometry';
 import { OrderedSet } from '../../mol-data/int';
 import { Vec3 } from '../../mol-math/linear-algebra';
-import { computeGaussianDensityTexture2d, computeGaussianDensity } from '../../mol-math/geometry/gaussian-density';
+import { computeGaussianDensity, computeGaussianDensityTexture2d } from '../../mol-math/geometry/gaussian-density';
 import { calcActiveVoxels } from '../../mol-gl/compute/marching-cubes/active-voxels';
 import { createHistogramPyramid } from '../../mol-gl/compute/histogram-pyramid/reduction';
 import { createIsosurfaceBuffers } from '../../mol-gl/compute/marching-cubes/isosurface';
@@ -31,7 +31,7 @@ const canvas = document.createElement('canvas');
 parent.appendChild(canvas);
 resizeCanvas(canvas, parent);
 
-const canvas3d = Canvas3D.fromCanvas(canvas, PD.merge(Canvas3DParams, PD.getDefaultValues(Canvas3DParams), {
+const canvas3d = Canvas3D.create(Canvas3DContext.fromCanvas(canvas), PD.merge(Canvas3DParams, PD.getDefaultValues(Canvas3DParams), {
     renderer: { backgroundColor: ColorNames.white },
     camera: { mode: 'orthographic' }
 }));
@@ -68,7 +68,7 @@ async function init() {
         console.timeEnd('gpu mc active2');
 
         console.time('gpu mc pyramid2');
-        const compacted2 = createHistogramPyramid(webgl, activeVoxelsTex2, densityTextureData2.gridTexScale);
+        const compacted2 = createHistogramPyramid(webgl, activeVoxelsTex2, densityTextureData2.gridTexScale, densityTextureData2.gridTexDim);
         webgl.waitForGpuCommandsCompleteSync();
         console.timeEnd('gpu mc pyramid2');
 
@@ -91,7 +91,7 @@ async function init() {
     console.timeEnd('gpu mc active');
 
     console.time('gpu mc pyramid');
-    const compacted = createHistogramPyramid(webgl, activeVoxelsTex, densityTextureData.gridTexScale);
+    const compacted = createHistogramPyramid(webgl, activeVoxelsTex, densityTextureData.gridTexScale, densityTextureData.gridTexDim);
     webgl.waitForGpuCommandsCompleteSync();
     console.timeEnd('gpu mc pyramid');
 
@@ -118,7 +118,7 @@ async function init() {
     //
 
     console.time('cpu gaussian');
-    const densityData = await computeGaussianDensity(position, box, radius, { ...props, useGpu: false }, webgl).run();
+    const densityData = await computeGaussianDensity(position, box, radius, props).run();
     console.timeEnd('cpu gaussian');
     console.log({ densityData });
 

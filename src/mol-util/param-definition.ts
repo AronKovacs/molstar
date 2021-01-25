@@ -83,15 +83,15 @@ export namespace ParamDefinition {
         return setInfo<Select<T>>({ type: 'select', defaultValue: checkDefaultKey(defaultValue, options), options, cycle: info?.cycle }, info);
     }
 
-    export interface MultiSelect<E extends string, T = E[]> extends Base<T> {
+    export interface MultiSelect<E extends string> extends Base<E[]> {
         type: 'multi-select'
         /** array of (value, label) tuples */
         options: readonly (readonly [E, string])[],
         emptyValue?: string
     }
-    export function MultiSelect<E extends string, T = E[]>(defaultValue: T, options: readonly (readonly [E, string])[], info?: Info & { emptyValue?: string }): MultiSelect<E, T> {
+    export function MultiSelect<E extends string>(defaultValue: E[], options: readonly (readonly [E, string])[], info?: Info & { emptyValue?: string }): MultiSelect<E> {
         // TODO: check if default value is a subset of options?
-        const ret = setInfo<MultiSelect<E, T>>({ type: 'multi-select', defaultValue, options }, info);
+        const ret = setInfo<MultiSelect<E>>({ type: 'multi-select', defaultValue, options }, info);
         if (info?.emptyValue) ret.emptyValue = info.emptyValue;
         return ret;
     }
@@ -546,6 +546,89 @@ export namespace ParamDefinition {
         } else {
             return b;
         }
+    }
+
+    function selectHasOption(p: Select<any> | MultiSelect<any>, v: any) {
+        for (const o of p.options) {
+            if (o[0] === v) return true;
+        }
+        return false;
+    }
+
+    function normalizeParam(p: Any, value: any, defaultIfUndefined: boolean, prune: boolean): any {
+        if (value === void 0 || value === null) {
+            return defaultIfUndefined ? p.defaultValue : void 0;
+        }
+
+        // TODO: is this a good idea and will work well?
+        // if (typeof p.defaultValue !== typeof value) {
+        //     return p.defaultValue;
+        // }
+
+        if (p.type === 'value') {
+            return value;
+        } else if (p.type === 'group') {
+            const ret = prune ? Object.create(null) : { ...value };
+            for (const key of Object.keys(p.params)) {
+                const param = p.params[key];
+                if (value[key] === void 0) {
+                    if (defaultIfUndefined) ret[key] = param.defaultValue;
+                } else {
+                    ret[key] = normalizeParam(param, value[key], defaultIfUndefined, prune);
+                }
+            }
+            return ret;
+        } else if (p.type === 'mapped') {
+            const v = value as NamedParams;
+            if (typeof v.name !== 'string') {
+                return p.defaultValue;
+            }
+            if (typeof v.params === 'undefined') {
+                return defaultIfUndefined ? p.defaultValue : void 0;
+            }
+
+            if (!selectHasOption(p.select, v.name)) {
+                return p.defaultValue;
+            }
+
+            const param = p.map(v.name);
+            return {
+                name: v.name,
+                params: normalizeParam(param, v.params, defaultIfUndefined, prune)
+            };
+        } else if (p.type === 'select') {
+            if (!selectHasOption(p, value)) return p.defaultValue;
+            return value;
+        } else if (p.type === 'multi-select') {
+            if (!Array.isArray(value)) return p.defaultValue;
+            const ret = value.filter(function (this: MultiSelect<any>, v: any) { return selectHasOption(this, v); }, p);
+            if (value.length > 0 && ret.length === 0) return p.defaultValue;
+            return ret;
+        } else if (p.type === 'object-list') {
+            if (!Array.isArray(value)) return p.defaultValue;
+            return value.map(v => normalizeParams(p.element, v, defaultIfUndefined ? 'all' : 'skip', prune));
+        }
+
+        // TODO: validate/normalize all param types "properly"??
+
+        return value;
+    }
+
+    export function normalizeParams(p: Params, value: any, defaultIfUndefined: 'all' | 'children' | 'skip', prune: boolean) {
+        if (typeof value !== 'object' || value === null) {
+            return defaultIfUndefined ? getDefaultValues(p) : value;
+        }
+
+        const ret = prune ? Object.create(null) : { ...value };
+        for (const key of Object.keys(p)) {
+            const param = p[key];
+            if (value[key] === void 0) {
+                if (defaultIfUndefined === 'all') ret[key] = param.defaultValue;
+            } else {
+                ret[key] = normalizeParam(param, value[key], defaultIfUndefined !== 'skip', prune);
+            }
+        }
+        return ret;
     }
 
     /**

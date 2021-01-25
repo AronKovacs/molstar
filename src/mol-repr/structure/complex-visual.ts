@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2018-2020 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2018-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
@@ -31,8 +31,9 @@ import { Text } from '../../mol-geo/geometry/text/text';
 import { SizeTheme } from '../../mol-theme/size';
 import { DirectVolume } from '../../mol-geo/geometry/direct-volume/direct-volume';
 import { createMarkers } from '../../mol-geo/geometry/marker-data';
-import { StructureParams, StructureMeshParams, StructureTextParams, StructureDirectVolumeParams, StructureLinesParams, StructureCylindersParams } from './params';
+import { StructureParams, StructureMeshParams, StructureTextParams, StructureDirectVolumeParams, StructureLinesParams, StructureCylindersParams, StructureTextureMeshParams } from './params';
 import { Clipping } from '../../mol-theme/clipping';
+import { TextureMesh } from '../../mol-geo/geometry/texture-mesh/texture-mesh';
 
 export interface  ComplexVisual<P extends StructureParams> extends Visual<Structure, P> { }
 
@@ -51,6 +52,8 @@ interface ComplexVisualBuilder<P extends StructureParams, G extends Geometry> {
     getLoci(pickingId: PickingId, structure: Structure, id: number): Loci
     eachLocation(loci: Loci, structure: Structure, apply: (interval: Interval) => boolean, isMarking: boolean): boolean,
     setUpdateState(state: VisualUpdateState, newProps: PD.Values<P>, currentProps: PD.Values<P>, newTheme: Theme, currentTheme: Theme, newStructure: Structure, currentStructure: Structure): void
+    mustRecreate?: (props: PD.Values<P>) => boolean
+    dispose?: (geometry: G) => void
 }
 
 interface ComplexVisualGeometryBuilder<P extends StructureParams, G extends Geometry> extends ComplexVisualBuilder<P, G> {
@@ -58,7 +61,7 @@ interface ComplexVisualGeometryBuilder<P extends StructureParams, G extends Geom
 }
 
 export function ComplexVisual<G extends Geometry, P extends StructureParams & Geometry.Params<G>>(builder: ComplexVisualGeometryBuilder<P, G>, materialId: number): ComplexVisual<P> {
-    const { defaultProps, createGeometry, createLocationIterator, getLoci, eachLocation, setUpdateState } = builder;
+    const { defaultProps, createGeometry, createLocationIterator, getLoci, eachLocation, setUpdateState, mustRecreate, dispose } = builder;
     const { updateValues, updateBoundingSphere, updateRenderableState, createPositionIterator } = builder.geometryUtils;
     const updateState = VisualUpdateState.create();
 
@@ -238,9 +241,10 @@ export function ComplexVisual<G extends Geometry, P extends StructureParams & Ge
             Visual.setClipping(renderObject, clipping, lociApply, true);
         },
         destroy() {
-            // TODO
+            dispose?.(geometry);
             renderObject = undefined;
-        }
+        },
+        mustRecreate
     };
 }
 
@@ -343,5 +347,23 @@ export function ComplexDirectVolumeVisual<P extends ComplexDirectVolumeParams>(b
             if (!SizeTheme.areEqual(newTheme.size, currentTheme.size)) state.createGeometry = true;
         },
         geometryUtils: DirectVolume.Utils
+    }, materialId);
+}
+
+// texture-mesh
+
+export const ComplexTextureMeshParams = { ...StructureTextureMeshParams, ...StructureParams };
+export type ComplexTextureMeshParams = typeof ComplexTextureMeshParams
+
+export interface ComplexTextureMeshVisualBuilder<P extends ComplexTextureMeshParams> extends ComplexVisualBuilder<P, TextureMesh> { }
+
+export function ComplexTextureMeshVisual<P extends ComplexTextureMeshParams>(builder: ComplexTextureMeshVisualBuilder<P>, materialId: number): ComplexVisual<P> {
+    return ComplexVisual<TextureMesh, P>({
+        ...builder,
+        setUpdateState: (state: VisualUpdateState, newProps: PD.Values<P>, currentProps: PD.Values<P>, newTheme: Theme, currentTheme: Theme, newStructure: Structure, currentStructure: Structure) => {
+            builder.setUpdateState(state, newProps, currentProps, newTheme, currentTheme, newStructure, currentStructure);
+            if (!SizeTheme.areEqual(newTheme.size, currentTheme.size)) state.createGeometry = true;
+        },
+        geometryUtils: TextureMesh.Utils
     }, materialId);
 }

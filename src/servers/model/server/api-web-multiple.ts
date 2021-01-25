@@ -18,7 +18,9 @@ export interface MultipleQueryEntry<Name extends QueryName = QueryName> {
 export interface MultipleQuerySpec {
     queries: MultipleQueryEntry[],
     encoding?: Encoding,
-    asTarGz?: boolean
+    asTarGz?: boolean,
+    download?: boolean,
+    filename?: string
 }
 
 export function getMultiQuerySpecFilename() {
