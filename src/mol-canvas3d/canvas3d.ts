@@ -363,8 +363,10 @@ namespace Canvas3D {
                 }
 
                 if (MultiSamplePass.isEnabled(p.multiSample)) {
-                    multiSampleHelper.render(renderer, cam, scene, helper, true, p.transparentBackground, p);
+                    let pMultiSample = {...p, cutaway: p.renderer.clip.cutaway};
+                    multiSampleHelper.render(renderer, cam, scene, helper, true, p.transparentBackground, pMultiSample);
                 } else {
+                    passes.cutaway.render(renderer, cam, scene, p.renderer.clip.cutaway);
                     passes.draw.render(renderer, cam, scene, helper, true, p.transparentBackground, p.postprocessing);
                 }
                 pickHelper.dirty = true;
@@ -737,7 +739,10 @@ namespace Canvas3D {
 
                 if (props.postprocessing) Object.assign(p.postprocessing, props.postprocessing);
                 if (props.multiSample) Object.assign(p.multiSample, props.multiSample);
-                if (props.renderer) renderer.setProps(props.renderer);
+                if (props.renderer) {
+                    renderer.setProps(props.renderer);
+                    Object.assign(p.renderer.clip.cutaway, props.renderer.clip?.cutaway);
+                }
                 if (props.trackball) controls.setProps(props.trackball);
                 if (props.debug) helper.debug.setProps(props.debug);
                 if (props.handle) helper.handle.setProps(props.handle);

@@ -69,6 +69,12 @@ vec3 screenSpaceToViewSpace(const in vec3 ssPos, const in mat4 invProjection) {
     return p.xyz / p.w;
 }
 
+void screenSpaceToViewRay(const in vec2 ssPos, const in mat4 invProjection, out vec3 rayOrigin, out vec3 rayDirection) {
+    rayOrigin = screenSpaceToViewSpace(vec3(ssPos, 0.0), invProjection);
+    vec3 rayEnd = screenSpaceToViewSpace(vec3(ssPos, 1.0), invProjection);
+    rayDirection = normalize(rayEnd - rayOrigin);
+}
+
 const float PackUpscale = 256.0 / 255.0; // fraction -> 0..1 (including 1)
 const float UnpackDownscale = 255.0 / 256.0; // 0..1 -> fraction (excluding 1)
 const vec3 PackFactors = vec3(256.0 * 256.0 * 256.0, 256.0 * 256.0,  256.0);
@@ -105,6 +111,18 @@ float orthographicDepthToViewZ(const in float linearClipZ, const in float near, 
 
 float depthToViewZ(const in float isOrtho, const in float linearClipZ, const in float near, const in float far) {
     return isOrtho == 1.0 ? orthographicDepthToViewZ(linearClipZ, near, far) : perspectiveDepthToViewZ(linearClipZ, near, far);
+}
+
+float viewZToOrthographicDepth( const in float viewZ, const in float near, const in float far) {
+    return (viewZ + near) / (near - far);
+}
+
+float viewZToPerspectiveDepth( const in float viewZ, const in float near, const in float far) {
+    return ((near + viewZ) * far) / ((far - near) * viewZ);
+}
+
+float viewZToDepth(const in float isOrtho, const in float viewZ, const in float near, const in float far) {
+    return isOrtho == 1.0 ? viewZToOrthographicDepth(viewZ, near, far) : viewZToPerspectiveDepth(viewZ, near, far);
 }
 
 #if __VERSION__ == 100

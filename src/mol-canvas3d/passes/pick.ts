@@ -17,6 +17,7 @@ import { StereoCamera } from '../camera/stereo';
 import { cameraUnproject } from '../camera/util';
 import { Viewport } from '../camera/util';
 import { Helper } from '../helper/helper';
+import { CutawayPass } from './cutaway';
 import { DrawPass } from './draw';
 
 const NullId = Math.pow(2, 24) - 2;
@@ -32,7 +33,7 @@ export class PickPass {
     private pickWidth: number
     private pickHeight: number
 
-    constructor(private webgl: WebGLContext, private drawPass: DrawPass, readonly pickBaseScale: number) {
+    constructor(private webgl: WebGLContext, private drawPass: DrawPass, readonly pickBaseScale: number, private readonly cutaway: CutawayPass) {
         const pickScale = pickBaseScale / webgl.pixelRatio;
         this.pickWidth = Math.ceil(drawPass.colorTarget.getWidth() * pickScale);
         this.pickHeight = Math.ceil(drawPass.colorTarget.getHeight() * pickScale);
@@ -66,9 +67,9 @@ export class PickPass {
     private renderVariant(renderer: Renderer, camera: ICamera, scene: Scene, helper: Helper, variant: GraphicsRenderVariant) {
         const depth = this.drawPass.depthTexturePrimitives;
         renderer.clear(false);
-        renderer.renderPick(scene.primitives, camera, variant, null);
-        renderer.renderPick(scene.volumes, camera, variant, depth);
-        renderer.renderPick(helper.handle.scene, camera, variant, null);
+        renderer.renderPick(scene.primitives, camera, variant, null, this.cutaway.target);
+        renderer.renderPick(scene.volumes, camera, variant, depth, null);
+        renderer.renderPick(helper.handle.scene, camera, variant, null, null);
     }
 
     render(renderer: Renderer, camera: ICamera, scene: Scene, helper: Helper) {

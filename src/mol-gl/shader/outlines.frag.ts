@@ -69,12 +69,6 @@ void main(void) {
                 outline = 0.0;
                 bestDepth = sampleDepth;
             }
-            /*
-            if (abs(selfViewZ - sampleViewZ) > uMaxPossibleViewZDiff && selfDepth < sampleDepth) {
-                outline = 0.0;
-                bestDepth = 0.01;
-            }
-            */
             #if dOutlineDynamicWidth == 1
                 if (abs(selfViewZ - sampleViewZ) > uMaxPossibleViewZDiff && selfDepth < sampleDepth) {
                     innerOutline = -1.0;
@@ -85,7 +79,7 @@ void main(void) {
 
     #if dOutlineDynamicWidth == 1
         vec3 screenCoords = vec3(coords, bestDepth);
-        gl_FragColor = vec4(outline == 0.0 ? vec4(screenCoords, getPixelViewSize(screenCoords, invTexSize)) : vec4(-1.0, -1.0, 1000.0, innerOutline));
+        gl_FragColor = vec4(outline == 0.0 ? vec4(screenCoords, getPixelViewSize(screenCoords, invTexSize)) : vec4(-10000.0, -10000.0, 1000.0, innerOutline));
     #else
         gl_FragColor = vec4(outline, packUnitIntervalToRG(bestDepth), 0.0);
     #endif

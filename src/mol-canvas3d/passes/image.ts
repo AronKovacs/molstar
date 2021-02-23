@@ -17,11 +17,13 @@ import { Viewport } from '../camera/util';
 import { PixelData } from '../../mol-util/image';
 import { Helper } from '../helper/helper';
 import { CameraHelper, CameraHelperParams } from '../helper/camera-helper';
+import { CutawayParams, CutawayPass } from './cutaway';
 
 export const ImageParams = {
     transparentBackground: PD.Boolean(false),
     multiSample: PD.Group(MultiSampleParams),
     postprocessing: PD.Group(PostprocessingParams),
+    cutaway: PD.Group(CutawayParams),
 
     cameraHelper: PD.Group(CameraHelperParams),
 };
@@ -37,6 +39,7 @@ export class ImagePass {
     private _colorTarget: RenderTarget
     get colorTarget() { return this._colorTarget; }
 
+    private readonly cutawayPass: CutawayPass
     private readonly drawPass: DrawPass
     private readonly multiSamplePass: MultiSamplePass
     private readonly multiSampleHelper: MultiSampleHelper
@@ -48,8 +51,9 @@ export class ImagePass {
     constructor(private webgl: WebGLContext, private renderer: Renderer, private scene: Scene, private camera: Camera, helper: Helper, enableWboit: boolean, props: Partial<ImageProps>) {
         this.props = { ...PD.getDefaultValues(ImageParams), ...props };
 
-        this.drawPass = new DrawPass(webgl, 128, 128, enableWboit);
-        this.multiSamplePass = new MultiSamplePass(webgl, this.drawPass);
+        this.cutawayPass = new CutawayPass(webgl, 128, 128);
+        this.drawPass = new DrawPass(webgl, 128, 128, enableWboit, this.cutawayPass);
+        this.multiSamplePass = new MultiSamplePass(webgl, this.drawPass, this.cutawayPass);
         this.multiSampleHelper = new MultiSampleHelper(this.multiSamplePass);
 
         this.helper = {
@@ -85,6 +89,7 @@ export class ImagePass {
             this.multiSampleHelper.render(this.renderer, this._camera, this.scene, this.helper, false, this.props.transparentBackground, this.props);
             this._colorTarget = this.multiSamplePass.colorTarget;
         } else {
+            this.cutawayPass.render(this.renderer, this._camera, this.scene, this.props.cutaway);
             this.drawPass.render(this.renderer, this._camera, this.scene, this.helper, false, this.props.transparentBackground, this.props.postprocessing);
             this._colorTarget = this.drawPass.getColorTarget(this.props.postprocessing);
         }

@@ -26,11 +26,6 @@ uniform bool uTransparentBackground;
 uniform float uOcclusionBias;
 uniform float uOcclusionRadius;
 
-uniform float uOutlineScale;
-uniform float uOutlineThreshold;
-
-uniform float uMaxPossibleViewZDiff;
-
 const vec3 occlusionColor = vec3(0.0);
 
 #include common
@@ -48,40 +43,8 @@ float getDepth(const in vec2 coords) {
 }
 
 bool isBackground(const in float depth) {
-    return depth == 1.0;
+    return depth > 0.99;
 }
-
-#if dOutlineDynamicWidth != 1
-float getOutline(const in vec2 coords, out float closestTexel) {
-    float backgroundViewZ = uFar + 3.0 * uMaxPossibleViewZDiff;
-    vec2 invTexSize = 1.0 / uTexSize;
-
-    float selfDepth = getDepth(coords);
-    float selfViewZ = isBackground(selfDepth) ? backgroundViewZ : getViewZ(selfDepth);
-
-    float outline = 1.0;
-    closestTexel = 1.0;
-    for (int y = -dOutlineScale; y <= dOutlineScale; y++) {
-        for (int x = -dOutlineScale; x <= dOutlineScale; x++) {
-            if (x * x + y * y > dOutlineScale * dOutlineScale) {
-                continue;
-            }
-
-            vec2 sampleCoords = coords + vec2(float(x), float(y)) * invTexSize;
-
-            vec4 sampleOutlineCombined = texture2D(tOutlines, sampleCoords);
-            float sampleOutline = sampleOutlineCombined.r;
-            float sampleOutlineDepth = unpackRGToUnitInterval(sampleOutlineCombined.gb);
-
-            if (sampleOutline == 0.0 && sampleOutlineDepth < closestTexel && abs(selfViewZ - sampleOutlineDepth) > uMaxPossibleViewZDiff) {
-                outline = 0.0;
-                closestTexel = sampleOutlineDepth;
-            }
-        }
-    }
-    return outline;
-}
-#endif
 
 float getSsao(vec2 coords) {
     float rawSsao = unpackRGToUnitInterval(texture2D(tSsaoDepth, coords).xy);
@@ -117,16 +80,13 @@ void main(void) {
     // outline needs to be handled after occlusion to keep them clean
     #ifdef dOutlineEnable
         #if dOutlineDynamicWidth == 1
-            vec4 outlineData = texture2D(tOutlines, coords);
-            float outline = outlineData.x >= 0.0 ? 0.0 : 1.0;
-            float closestTexel = outlineData.z;
+            float closestTexel = texture2D(tOutlines, coords).z;
         #else
-            float closestTexel;
-            float outline = getOutline(coords, closestTexel);
+            float closestTexel = unpackRGBAToDepth(texture2D(tOutlines, coords));
         #endif
 
-        if (outline == 0.0) {
-            color.rgb *= outline;
+        if (!isBackground(closestTexel)) {
+            color.rgb = vec3(0.0);
             viewDist = abs(getViewZ(closestTexel));
             fogFactor = smoothstep(uFogNear, uFogFar, viewDist);
             if (!uTransparentBackground) {

@@ -25,6 +25,7 @@ import { StereoCamera } from '../camera/stereo';
 
 import quad_vert from '../../mol-gl/shader/quad.vert';
 import compose_frag from '../../mol-gl/shader/compose.frag';
+import { CutawayPass, CutawayProps } from './cutaway';
 
 const ComposeSchema = {
     ...QuadSchema,
@@ -55,7 +56,7 @@ export const MultiSampleParams = {
 };
 export type MultiSampleProps = PD.Values<typeof MultiSampleParams>
 
-type Props = { multiSample: MultiSampleProps, postprocessing: PostprocessingProps }
+type Props = { multiSample: MultiSampleProps, postprocessing: PostprocessingProps, cutaway: CutawayProps }
 
 export class MultiSamplePass {
     static isEnabled(props: MultiSampleProps) {
@@ -68,7 +69,7 @@ export class MultiSamplePass {
     private holdTarget: RenderTarget
     private compose: ComposeRenderable
 
-    constructor(private webgl: WebGLContext, private drawPass: DrawPass) {
+    constructor(private webgl: WebGLContext, private drawPass: DrawPass, private readonly cutawaysPass: CutawayPass) {
         const { colorBufferFloat, textureFloat, colorBufferHalfFloat, textureHalfFloat } = webgl.extensions;
         const width = drawPass.colorTarget.getWidth();
         const height = drawPass.colorTarget.getHeight();
@@ -111,7 +112,7 @@ export class MultiSamplePass {
     }
 
     private renderMultiSample(renderer: Renderer, camera: Camera | StereoCamera, scene: Scene, helper: Helper, toDrawingBuffer: boolean, transparentBackground: boolean, props: Props) {
-        const { compose, composeTarget, drawPass, webgl } = this;
+        const { compose, composeTarget, drawPass, cutawaysPass, webgl } = this;
         const { gl, state } = webgl;
 
         // based on the Multisample Anti-Aliasing Render Pass
@@ -142,6 +143,9 @@ export class MultiSamplePass {
             const uniformCenteredDistribution = -0.5 + (i + 0.5) / offsetList.length;
             const sampleWeight = baseSampleWeight + roundingRange * uniformCenteredDistribution;
             ValueCell.update(compose.values.uWeight, sampleWeight);
+
+            // render cutaway
+            cutawaysPass.render(renderer, camera, scene, props.cutaway);
 
             // render scene
             drawPass.render(renderer, camera, scene, helper, false, transparentBackground, props.postprocessing);
@@ -178,7 +182,7 @@ export class MultiSamplePass {
     }
 
     private renderTemporalMultiSample(sampleIndex: number, renderer: Renderer, camera: Camera | StereoCamera, scene: Scene, helper: Helper, toDrawingBuffer: boolean, transparentBackground: boolean, props: Props) {
-        const { compose, composeTarget, holdTarget, drawPass, webgl } = this;
+        const { compose, composeTarget, holdTarget, drawPass, cutawaysPass, webgl } = this;
         const { gl, state } = webgl;
 
         // based on the Multisample Anti-Aliasing Render Pass
@@ -194,6 +198,7 @@ export class MultiSamplePass {
         const sampleWeight = 1.0 / offsetList.length;
 
         if (sampleIndex === -1) {
+            cutawaysPass.render(renderer, camera, scene, props.cutaway);
             drawPass.render(renderer, camera, scene, helper, false, transparentBackground, props.postprocessing);
             ValueCell.update(compose.values.uWeight, 1.0);
             ValueCell.update(compose.values.tColor, drawPass.getColorTarget(props.postprocessing).texture);
@@ -220,6 +225,9 @@ export class MultiSamplePass {
                 const offset = offsetList[sampleIndex];
                 Camera.setViewOffset(camera.viewOffset, width, height, offset[0], offset[1], width, height);
                 camera.update();
+
+                // render cutaway
+                cutawaysPass.render(renderer, camera, scene, props.cutaway);
 
                 // render scene
                 drawPass.render(renderer, camera, scene, helper, false, transparentBackground, props.postprocessing);

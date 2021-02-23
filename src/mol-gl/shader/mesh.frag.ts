@@ -16,7 +16,19 @@ precision highp int;
 #include common_clip
 #include wboit_params
 
+uniform bool uCutaway;
+uniform sampler2D tDepthPreCutaway;
+uniform sampler2D tDepthCutaway;
+
 void main() {
+    vec2 screenCoords = gl_FragCoord.xy / uDrawingBufferSize;
+    float cutawayDepth = unpackRGBAToDepth(texture2D(tDepthCutaway, screenCoords));
+    if (uCutaway && cutawayDepth < 0.99 && gl_FragCoord.z < cutawayDepth) {
+        discard;
+    }
+    float preCutawayDepth = unpackRGBAToDepth(texture2D(tDepthPreCutaway, screenCoords));
+    bool isOnSurface = preCutawayDepth + 0.01 < gl_FragCoord.z;
+
     #include clip_pixel
 
     // Workaround for buggy gl_FrontFacing (e.g. on some integrated Intel GPUs)
@@ -37,6 +49,12 @@ void main() {
 
     float fragmentDepth = gl_FragCoord.z;
     #include assign_material_color
+
+    #if defined(dRenderVariant_color)
+        if (!(!interior && !isOnSurface)) {
+            material.rgb = vec3(0.88, 0.45, 0.0);
+        }
+    #endif
 
     #if defined(dRenderVariant_pick)
         #include check_picking_alpha

@@ -20,14 +20,18 @@ import { DrawPass } from './draw';
 import { ICamera } from '../../mol-canvas3d/camera';
 import quad_vert from '../../mol-gl/shader/quad.vert';
 import outlines_frag from '../../mol-gl/shader/outlines.frag';
+import outlines_static_frag from  '../../mol-gl/shader/outlines-static.frag';
 import outlines_jfa_step_frag from '../../mol-gl/shader/outlines-jfa-step.frag';
 import ssao_frag from '../../mol-gl/shader/ssao.frag';
 import ssao_blur_frag from '../../mol-gl/shader/ssao-blur.frag';
+import postprocessing_depth_merge_frag from '../../mol-gl/shader/postprocessing-depth-merge.frag';
 import postprocessing_frag from '../../mol-gl/shader/postprocessing.frag';
 import { Framebuffer } from '../../mol-gl/webgl/framebuffer';
 import { Color } from '../../mol-util/color';
 import { FxaaParams, FxaaPass } from './fxaa';
 import { SmaaParams, SmaaPass } from './smaa';
+import Scene from '../../mol-gl/scene';
+import { isDebugMode } from '../../mol-util/debug';
 
 const OutlinesSchema = {
     ...QuadSchema,
@@ -63,6 +67,43 @@ function getOutlinesRenderable(ctx: WebGLContext, depthTexture: Texture): Outlin
 
     const schema = { ...OutlinesSchema };
     const shaderCode = ShaderCode('outlines', quad_vert, outlines_frag);
+    const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
+
+    return createComputeRenderable(renderItem, values);
+}
+
+const OutlinesStaticSchema = {
+    ...QuadSchema,
+    tOutlines: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
+    tDepth: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
+    uTexSize: UniformSpec('v2'),
+
+    dOrthographic: DefineSpec('number'),
+    uNear: UniformSpec('f'),
+    uFar: UniformSpec('f'),
+
+    dOutlineScale: DefineSpec('number'),
+    uMaxPossibleViewZDiff: UniformSpec('f'),
+};
+type OutlinesStaticRenderable = ComputeRenderable<Values<typeof OutlinesStaticSchema>>
+
+function getOutlinesStaticRenderable(ctx: WebGLContext, outlinesTexture: Texture, depthTexture: Texture): OutlinesStaticRenderable {
+    const values: Values<typeof OutlinesStaticSchema> = {
+        ...QuadValues,
+        tOutlines: ValueCell.create(outlinesTexture),
+        tDepth: ValueCell.create(depthTexture),
+        uTexSize: ValueCell.create(Vec2.create(depthTexture.getWidth(), depthTexture.getHeight())),
+
+        dOrthographic: ValueCell.create(0),
+        uNear: ValueCell.create(1),
+        uFar: ValueCell.create(10000),
+
+        dOutlineScale: ValueCell.create(1),
+        uMaxPossibleViewZDiff: ValueCell.create(0.5),
+    };
+
+    const schema = { ...OutlinesStaticSchema };
+    const shaderCode = ShaderCode('outlines-static', quad_vert, outlines_static_frag);
     const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
 
     return createComputeRenderable(renderItem, values);
@@ -207,6 +248,31 @@ function getSamples(vectorSamples: Vec3[], nSamples: number): number[] {
     return samples;
 }
 
+const PostprocessingDepthMergeSchema = {
+    ...QuadSchema,
+    tDepth: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
+    tOutlines: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
+    uTexSize: UniformSpec('v2'),
+    dOutlineDynamicWidth: DefineSpec('number'),
+};
+type PostprocessingDepthMergeRenderable = ComputeRenderable<Values<typeof PostprocessingDepthMergeSchema>>
+
+function getPostprocessingDepthMergeRenderable(ctx: WebGLContext, depthTexture: Texture, outlinesTexture: Texture): PostprocessingDepthMergeRenderable {
+    const values: Values<typeof PostprocessingDepthMergeSchema> = {
+        ...QuadValues,
+        tDepth: ValueCell.create(depthTexture),
+        tOutlines: ValueCell.create(outlinesTexture),
+        uTexSize: ValueCell.create(Vec2.create(depthTexture.getWidth(), depthTexture.getHeight())),
+        dOutlineDynamicWidth: ValueCell.create(0),
+    };
+
+    const schema = { ...PostprocessingDepthMergeSchema };
+    const shaderCode = ShaderCode('postprocessing-depth-merge', quad_vert, postprocessing_depth_merge_frag);
+    const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
+
+    return createComputeRenderable(renderItem, values);
+}
+
 const PostprocessingSchema = {
     ...QuadSchema,
     tSsaoDepth: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
@@ -223,14 +289,10 @@ const PostprocessingSchema = {
     uFogColor: UniformSpec('v3'),
     uTransparentBackground: UniformSpec('b'),
 
-    uMaxPossibleViewZDiff: UniformSpec('f'),
-
     dOcclusionEnable: DefineSpec('boolean'),
 
     dOutlineEnable: DefineSpec('boolean'),
     dOutlineDynamicWidth: DefineSpec('number'),
-    dOutlineScale: DefineSpec('number'),
-    uOutlineThreshold: UniformSpec('f'),
 };
 type PostprocessingRenderable = ComputeRenderable<Values<typeof PostprocessingSchema>>
 
@@ -251,14 +313,10 @@ function getPostprocessingRenderable(ctx: WebGLContext, colorTexture: Texture, d
         uFogColor: ValueCell.create(Vec3.create(1, 1, 1)),
         uTransparentBackground: ValueCell.create(false),
 
-        uMaxPossibleViewZDiff: ValueCell.create(0.5),
-
         dOcclusionEnable: ValueCell.create(false),
 
         dOutlineEnable: ValueCell.create(false),
         dOutlineDynamicWidth: ValueCell.create(1),
-        dOutlineScale: ValueCell.create(1),
-        uOutlineThreshold: ValueCell.create(0.33),
     };
 
     const schema = { ...PostprocessingSchema };
@@ -274,7 +332,7 @@ export const PostprocessingParams = {
             samples: PD.Numeric(64, {min: 1, max: 256, step: 1}),
             radius: PD.Numeric(5, { min: 0, max: 10, step: 0.1 }, { description: 'Final radius is 2^x.' }),
             bias: PD.Numeric(0.8, { min: 0, max: 3, step: 0.1 }),
-            blurKernelSize: PD.Numeric(20, { min: 1, max: 25, step: 2 }),
+            blurKernelSize: PD.Numeric(25, { min: 1, max: 25, step: 2 }),
         }),
         off: PD.Group({})
     }, { cycle: true, description: 'Darken occluded crevices with the ambient occlusion effect' }),
@@ -284,7 +342,7 @@ export const PostprocessingParams = {
             threshold: PD.Numeric(0.33, { min: 0.01, max: 1, step: 0.01 }),
         }),
         dynamicWidth: PD.Group({
-            width: PD.Numeric(0.1, { min: 0.01, max: 5, step: 0.01 }, { description: 'Width in angstroms.' }),
+            width: PD.Numeric(0.005, { min: 0.001, max: 0.05, step: 0.001 }),
             threshold: PD.Numeric(0.33, { min: 0.01, max: 1, step: 0.01 }),
         }),
         off: PD.Group({})
@@ -304,8 +362,13 @@ export class PostprocessingPass {
 
     readonly target: RenderTarget
 
+    private readonly drawPassDepthTexture: Texture
+
     private readonly outlinesTarget: RenderTarget
     private readonly outlinesRenderable: OutlinesRenderable
+
+    private readonly outlinesStaticTarget: RenderTarget
+    private readonly outlinesStaticRenderable: OutlinesStaticRenderable
 
     private readonly outlinesJfaATarget: RenderTarget
     private readonly outlinesJfaBTarget: RenderTarget
@@ -320,6 +383,9 @@ export class PostprocessingPass {
     private readonly ssaoDepthTexture: Texture
     private readonly ssaoDepthBlurProxyTexture: Texture
 
+    private readonly depthTarget: RenderTarget
+    private readonly depthMergeRenderable: PostprocessingDepthMergeRenderable
+
     private readonly ssaoRenderable: SsaoRenderable
     private readonly ssaoBlurFirstPassRenderable: SsaoBlurRenderable
     private readonly ssaoBlurSecondPassRenderable: SsaoBlurRenderable
@@ -331,10 +397,34 @@ export class PostprocessingPass {
 
     private readonly renderable: PostprocessingRenderable
 
+    private readonly _dynamicOutlinesSupported: boolean
+    public get dynamicOutlinesSupported() {
+        return this._dynamicOutlinesSupported;
+    }
+
+    static areDynamicOutlinesSupported(webgl: WebGLContext) {
+        const { extensions: { textureFloat, colorBufferFloat } } = webgl;
+        if (!textureFloat || !colorBufferFloat) {
+            if (isDebugMode) {
+                const missing: string[] = [];
+                if (!textureFloat) missing.push('textureFloat');
+                if (!colorBufferFloat) missing.push('colorBufferFloat');
+                console.log(`Missing "${missing.join('", "')}" extensions required for "dynamic outlines"`);
+            }
+            return false;
+        } else {
+            return true;
+        }
+    }
+
     constructor(private webgl: WebGLContext, drawPass: DrawPass) {
         const { colorTarget, depthTexture } = drawPass;
         const width = colorTarget.getWidth();
         const height = colorTarget.getHeight();
+
+        this._dynamicOutlinesSupported = PostprocessingPass.areDynamicOutlinesSupported(webgl);
+
+        this.drawPassDepthTexture = depthTexture;
 
         this.nSamples = 1;
         this.blurKernelSize = 1;
@@ -343,7 +433,10 @@ export class PostprocessingPass {
         this.target = webgl.createRenderTarget(width, height, false, 'uint8', 'linear');
 
         this.outlinesTarget = webgl.createRenderTarget(width, height, false);
-        this.outlinesRenderable = getOutlinesRenderable(webgl, depthTexture);
+        this.outlinesRenderable = getOutlinesRenderable(webgl, this.drawPassDepthTexture);
+
+        this.outlinesStaticTarget = webgl.createRenderTarget(width, height, false, 'uint8', 'nearest');
+        this.outlinesStaticRenderable = getOutlinesStaticRenderable(webgl, this.outlinesTarget.texture, this.drawPassDepthTexture);
 
         this.outlinesJfaATarget = webgl.createRenderTarget(width, height, false, 'float32', 'nearest');
         this.outlinesJfaBTarget = webgl.createRenderTarget(width, height, false, 'float32', 'nearest');
@@ -374,24 +467,31 @@ export class PostprocessingPass {
 
         this.ssaoDepthTexture.attachFramebuffer(this.ssaoBlurSecondPassFramebuffer, 'color0');
 
-        this.ssaoRenderable = getSsaoRenderable(webgl, depthTexture);
+        this.depthTarget = webgl.createRenderTarget(width, height, false, 'uint8', 'nearest');
+        this.depthMergeRenderable = getPostprocessingDepthMergeRenderable(webgl, this.drawPassDepthTexture, this.outlinesStaticTarget.texture);
+
+        this.ssaoRenderable = getSsaoRenderable(webgl, this.drawPassDepthTexture);
         this.ssaoBlurFirstPassRenderable = getSsaoBlurRenderable(webgl, this.ssaoDepthTexture, 'horizontal');
         this.ssaoBlurSecondPassRenderable = getSsaoBlurRenderable(webgl, this.ssaoDepthBlurProxyTexture, 'vertical');
-        this.renderable = getPostprocessingRenderable(webgl, colorTarget.texture,  depthTexture, this.outlinesTarget.texture, this.ssaoDepthTexture);
+        this.renderable = getPostprocessingRenderable(webgl, colorTarget.texture,  this.drawPassDepthTexture, this.outlinesTarget.texture, this.ssaoDepthTexture);
     }
 
     setSize(width: number, height: number) {
         const [w, h] = this.renderable.values.uTexSize.ref.value;
         if (width !== w || height !== h) {
             this.target.setSize(width, height);
+            this.depthTarget.setSize(width, height);
             this.outlinesTarget.setSize(width, height);
+            this.outlinesStaticTarget.setSize(width, height);
             this.outlinesJfaATarget.setSize(width, height);
             this.outlinesJfaBTarget.setSize(width, height);
             this.ssaoDepthTexture.define(width, height);
             this.ssaoDepthBlurProxyTexture.define(width, height);
 
             ValueCell.update(this.renderable.values.uTexSize, Vec2.set(this.renderable.values.uTexSize.ref.value, width, height));
+            ValueCell.update(this.depthMergeRenderable.values.uTexSize, Vec2.set(this.depthMergeRenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.outlinesRenderable.values.uTexSize, Vec2.set(this.outlinesRenderable.values.uTexSize.ref.value, width, height));
+            ValueCell.update(this.outlinesStaticRenderable.values.uTexSize, Vec2.set(this.outlinesStaticRenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.outlinesJfaARenderable.values.uTexSize, Vec2.set(this.outlinesJfaARenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.outlinesJfaBRenderable.values.uTexSize, Vec2.set(this.outlinesJfaBRenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.ssaoRenderable.values.uTexSize, Vec2.set(this.ssaoRenderable.values.uTexSize.ref.value, width, height));
@@ -400,7 +500,7 @@ export class PostprocessingPass {
         }
     }
 
-    private updateState(camera: ICamera, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
+    private updateState(camera: ICamera, scene: Scene, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
         const { x, y, width, height } = camera.viewport;
 
         const orthographic = camera.state.mode === 'orthographic' ? 1 : 0;
@@ -410,6 +510,7 @@ export class PostprocessingPass {
 
         let needsUpdateMain = false;
         let needsUpdateOutlines = false;
+        let needsUpdateOutlinesStatic = false;
         let needsUpdateSsao = false;
         let needsUpdateSsaoBlur = false;
 
@@ -467,9 +568,8 @@ export class PostprocessingPass {
         if (props.outline.name !== 'off') {
             const factor = Math.pow(1000, props.outline.params.threshold) / 1000;
             const maxPossibleViewZDiff = factor * (camera.far - camera.near);
-            const outlinePixelWidth = props.outline.params.width - 1;
-            const outlineViewWidth = props.outline.params.width;
 
+            // outlines gen
             ValueCell.updateIfChanged(this.outlinesRenderable.values.uNear, camera.near);
             ValueCell.updateIfChanged(this.outlinesRenderable.values.uFar, camera.far);
             ValueCell.updateIfChanged(this.outlinesRenderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
@@ -479,15 +579,26 @@ export class PostprocessingPass {
             if (this.outlinesRenderable.values.dOutlineDynamicWidth.ref.value !== outlinesDynamicWidth) { needsUpdateOutlines = true; }
             ValueCell.updateIfChanged(this.outlinesRenderable.values.dOutlineDynamicWidth, outlinesDynamicWidth);
 
-            ValueCell.updateIfChanged(this.outlinesJfaARenderable.values.uOutlineViewRadius, outlineViewWidth);
-            ValueCell.updateIfChanged(this.outlinesJfaBRenderable.values.uOutlineViewRadius, outlineViewWidth);
+            if (outlinesDynamicWidth) {
+                let outlineViewWidth = props.outline.params.width * scene.boundingSphereVisible.radius;
 
-            ValueCell.updateIfChanged(this.renderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
-            ValueCell.updateIfChanged(this.renderable.values.uOutlineThreshold, props.outline.params.threshold);
+                ValueCell.updateIfChanged(this.outlinesJfaARenderable.values.uOutlineViewRadius, outlineViewWidth);
+                ValueCell.updateIfChanged(this.outlinesJfaBRenderable.values.uOutlineViewRadius, outlineViewWidth);
+            } else {
+                let outlinePixelWidth = Math.ceil(this.webgl.pixelRatio * (props.outline.params.width - 1));
+
+                if (this.outlinesStaticRenderable.values.dOrthographic.ref.value !== orthographic) { needsUpdateOutlinesStatic = true; }
+                ValueCell.updateIfChanged(this.outlinesStaticRenderable.values.dOrthographic, orthographic);
+                ValueCell.updateIfChanged(this.outlinesStaticRenderable.values.uNear, camera.near);
+                ValueCell.updateIfChanged(this.outlinesStaticRenderable.values.uFar, camera.far);
+                if (this.outlinesStaticRenderable.values.dOutlineScale.ref.value !== outlinePixelWidth) { needsUpdateOutlinesStatic = true; }
+                ValueCell.updateIfChanged(this.outlinesStaticRenderable.values.dOutlineScale, outlinePixelWidth);
+                ValueCell.updateIfChanged(this.outlinesStaticRenderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
+            }
+
+            // postprocessing renderable
             if (this.renderable.values.dOutlineDynamicWidth.ref.value !== outlinesDynamicWidth) { needsUpdateMain = true; }
             ValueCell.updateIfChanged(this.renderable.values.dOutlineDynamicWidth, outlinesDynamicWidth);
-            if (this.renderable.values.dOutlineScale.ref.value !== outlinePixelWidth) { needsUpdateMain = true; }
-            ValueCell.updateIfChanged(this.renderable.values.dOutlineScale, outlinePixelWidth);
         }
 
         ValueCell.updateIfChanged(this.renderable.values.uFar, camera.far);
@@ -505,6 +616,10 @@ export class PostprocessingPass {
 
         if (needsUpdateOutlines) {
             this.outlinesRenderable.update();
+        }
+
+        if (needsUpdateOutlinesStatic) {
+            this.outlinesStaticRenderable.update();
         }
 
         if (needsUpdateSsao) {
@@ -531,7 +646,7 @@ export class PostprocessingPass {
         gl.scissor(x, y, width, height);
     }
 
-    _dynamicWidthOutlines(): Texture {
+    private dynamicWidthOutlines(): Texture {
         const width = this.outlinesJfaATarget.getWidth();
         const height = this.outlinesJfaATarget.getHeight();
 
@@ -593,22 +708,44 @@ export class PostprocessingPass {
         return readingA ? this.outlinesJfaATarget.texture : this.outlinesJfaBTarget.texture;
     }
 
-    render(camera: ICamera, toDrawingBuffer: boolean, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
-        this.updateState(camera, transparentBackground, backgroundColor, props);
+    render(camera: ICamera, scene: Scene, toDrawingBuffer: boolean, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
+        this.updateState(camera, scene, transparentBackground, backgroundColor, props);
 
         if (props.outline.name === 'staticWidth') {
             this.outlinesTarget.bind();
             this.outlinesRenderable.render();
-            if (this.renderable.values.tOutlines.ref.value !== this.outlinesTarget.texture) {
-                ValueCell.update(this.renderable.values.tOutlines, this.outlinesTarget.texture);
+
+            this.outlinesStaticTarget.bind();
+            this.outlinesStaticRenderable.render();
+
+            if (this.renderable.values.tOutlines.ref.value !== this.outlinesStaticTarget.texture) {
+                ValueCell.update(this.renderable.values.tOutlines, this.outlinesStaticTarget.texture);
                 this.renderable.update();
             }
+
+            if (this.depthMergeRenderable.values.tOutlines.ref.value !== this.outlinesStaticTarget.texture || this.depthMergeRenderable.values.dOutlineDynamicWidth.ref.value !== 0) {
+                ValueCell.updateIfChanged(this.depthMergeRenderable.values.tOutlines, this.outlinesStaticTarget.texture);
+                ValueCell.updateIfChanged(this.depthMergeRenderable.values.dOutlineDynamicWidth, 0);
+                this.depthMergeRenderable.update();
+            }
         } else if (props.outline.name === 'dynamicWidth') {
-            let outlines = this._dynamicWidthOutlines();
+            let outlines = this.dynamicWidthOutlines();
+
             if (this.renderable.values.tOutlines.ref.value !== outlines) {
                 ValueCell.update(this.renderable.values.tOutlines, outlines);
                 this.renderable.update();
             }
+
+            if (this.depthMergeRenderable.values.tOutlines.ref.value !== outlines || this.depthMergeRenderable.values.dOutlineDynamicWidth.ref.value !== 1) {
+                ValueCell.updateIfChanged(this.depthMergeRenderable.values.tOutlines, outlines);
+                ValueCell.updateIfChanged(this.depthMergeRenderable.values.dOutlineDynamicWidth, 1);
+                this.depthMergeRenderable.update();
+            }
+        }
+
+        if (props.outline.name !== 'off') {
+            this.depthTarget.bind();
+            this.depthMergeRenderable.render();
         }
 
         if (props.occlusion.name === 'on') {
@@ -633,6 +770,10 @@ export class PostprocessingPass {
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         this.renderable.render();
+    }
+
+    getDepthTarget(props: PostprocessingProps): Texture {
+        return props.outline.name === 'off' ? this.drawPassDepthTexture : this.depthTarget.texture;
     }
 }
 

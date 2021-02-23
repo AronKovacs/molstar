@@ -1,8 +1,9 @@
 export default `
+// FIXME
+uniform vec2 uDrawingBufferSize;
 #if defined(dRenderVariant_colorWboit)
     #if !defined(dRenderMode_volume) && !defined(dRenderMode_isosurface)
         uniform sampler2D tDepth;
-        uniform vec2 uDrawingBufferSize;
 
         float getDepth(const in vec2 coords) {
             // always packed due to merged depth from primitives and volumes

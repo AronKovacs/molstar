@@ -159,6 +159,7 @@ export const GlobalUniformSchema = {
     uHighlightColor: UniformSpec('v3'),
     uSelectColor: UniformSpec('v3'),
 
+    uCutaway: UniformSpec('b'),
     uRenderWboit: UniformSpec('b'),
 } as const;
 export type GlobalUniformSchema = typeof GlobalUniformSchema
@@ -166,6 +167,8 @@ export type GlobalUniformValues = Values<GlobalUniformSchema>
 
 export const GlobalTextureSchema = {
     tDepth: TextureSpec('texture', 'depth', 'ushort', 'nearest'),
+    tDepthPreCutaway: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
+    tDepthCutaway: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
 } as const;
 export type GlobalTextureSchema = typeof GlobalTextureSchema
 export type GlobalTextureValues = Values<GlobalTextureSchema>

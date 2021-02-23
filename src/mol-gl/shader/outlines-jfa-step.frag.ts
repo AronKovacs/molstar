@@ -25,77 +25,51 @@ float atan2(float y, float x) {
     return x == 0.0 ? sign(y) * PI / 2.0 : atan(y, x);
 }
 
-void getSamplingDxsDys(float angle, inout vec2 result[5]) {
+void getSamplingDxsDys(float angle, inout vec2 result[3]) {
     angle = (angle / PI) * 180.0 + 180.0;
     if (angle < 22.5 || angle > 337.5) {
-        result[0] = vec2(0.0, -1.0);
-        result[4] = vec2(0.0, 1.0);
-
-        result[1] = vec2(1.0, -1.0);
-        result[2] = vec2(1.0, 0.0);
-        result[3] = vec2(1.0, 1.0);
-    } else if (angle < 67.5) {
         result[0] = vec2(1.0, -1.0);
-        result[4] = vec2(-1.0, 1.0);
-
         result[1] = vec2(1.0, 0.0);
         result[2] = vec2(1.0, 1.0);
-        result[3] = vec2(0.0, 1.0);
-    } else if (angle < 112.5) {
+    } else if (angle < 67.5) {
         result[0] = vec2(1.0, 0.0);
-        result[4] = vec2(0.0, 1.0);
-
         result[1] = vec2(1.0, 1.0);
         result[2] = vec2(0.0, 1.0);
-        result[3] = vec2(-1.0, 1.0);
-    } else if (angle < 157.5) {
+    } else if (angle < 112.5) {
         result[0] = vec2(1.0, 1.0);
-        result[4] = vec2(-1.0, -1.0);
-
         result[1] = vec2(0.0, 1.0);
         result[2] = vec2(-1.0, 1.0);
-        result[3] = vec2(-1.0, 0.0);
-    } else if (angle < 202.5) {
+    } else if (angle < 157.5) {
         result[0] = vec2(0.0, 1.0);
-        result[4] = vec2(0.0, 1.0);
-
         result[1] = vec2(-1.0, 1.0);
         result[2] = vec2(-1.0, 0.0);
-        result[3] = vec2(-1.0, -1.0);
-    } else if (angle < 247.5) {
+    } else if (angle < 202.5) {
         result[0] = vec2(-1.0, 1.0);
-        result[4] = vec2(0.0, -1.0);
-
         result[1] = vec2(-1.0, 0.0);
         result[2] = vec2(-1.0, -1.0);
-        result[3] = vec2(0.0, -1.0);
-    } else if (angle < 292.5) {
+    } else if (angle < 247.5) {
         result[0] = vec2(-1.0, 0.0);
-        result[4] = vec2(1.0, 0.0);
-
         result[1] = vec2(-1.0, -1.0);
         result[2] = vec2(0.0, -1.0);
-        result[3] = vec2(1.0, -1.0);
-    } else if (angle < 337.5) {
+    } else if (angle < 292.5) {
         result[0] = vec2(-1.0, -1.0);
-        result[4] = vec2(1.0, 1.0);
-
         result[1] = vec2(0.0, -1.0);
         result[2] = vec2(1.0, -1.0);
-        result[3] = vec2(1.0, 0.0);
+    } else /* if (angle < 337.5) */ {
+        result[0] = vec2(0.0, -1.0);
+        result[1] = vec2(1.0, -1.0);
+        result[2] = vec2(1.0, 0.0);
     }
 }
 
 bool isInnerOutline(vec2 selfCoords, vec2 sampleCoords) {
     vec2 dir = sampleCoords - selfCoords;
     float angle = atan2(dir.y, dir.x);
-    vec2 sampleDxsDys[5];
+    vec2 sampleDxsDys[3];
     getSamplingDxsDys(angle, sampleDxsDys);
-    return //texture(tOutlines, sampleCoords + sampleDxsDys[0] / uTexSize).w < 0.0 ||
+    return texture(tOutlines, sampleCoords + sampleDxsDys[0] / uTexSize).w < 0.0 ||
            texture(tOutlines, sampleCoords + sampleDxsDys[1] / uTexSize).w < 0.0 ||
-           texture(tOutlines, sampleCoords + sampleDxsDys[2] / uTexSize).w < 0.0 ||
-           texture(tOutlines, sampleCoords + sampleDxsDys[3] / uTexSize).w < 0.0;// ||
-           //texture(tOutlines, sampleCoords + sampleDxsDys[4] / uTexSize).w < 0.0;
+           texture(tOutlines, sampleCoords + sampleDxsDys[2] / uTexSize).w < 0.0;
 }
 
 float outlineViewWidth(vec2 coordDiff) {
@@ -122,14 +96,18 @@ void main(void) {
             }
 
             vec4 sampleValue = texture2D(tOutlines, sampleCoords);
-            if (sampleValue.x < 0.0) {
+            vec2 sampleValueScreenCoords = sampleValue.xy;
+            if (sampleValueScreenCoords.x < 0.0) {
                 continue;                
             }
 
-            float innerOutlineCorrection = isInnerOutline(selfCoords, sampleValue.xy) ? 0.5 : 0.0;
+            vec2 coordDiff = (selfCoords.xy - sampleValueScreenCoords) * uTexSize;
+            float pixelDist = length(coordDiff);
+            if (pixelDist <= 3.6) {
+                float innerOutlineCorrection = isInnerOutline(selfCoords, sampleValueScreenCoords) ? 0.5 : 0.0;
+                pixelDist += innerOutlineCorrection;
+            }
 
-            vec2 coordDiff = (selfCoords.xy - sampleValue.xy) * uTexSize;
-            float pixelDist = length(coordDiff) + innerOutlineCorrection;
             if (sampleValue.z < result.z && pixelDist * abs(sampleValue.w) <= uOutlineViewRadius) {
                 result = sampleValue;
             }

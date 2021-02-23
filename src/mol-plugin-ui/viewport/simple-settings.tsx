@@ -134,6 +134,7 @@ const SimpleSettingsMapping = ParamMapping({
         };
         canvas.renderer.clip = {
             variant: s.clipping.variant,
+            cutaway: s.clipping.cutaway,
             objects: s.clipping.objects,
         };
 
