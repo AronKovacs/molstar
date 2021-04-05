@@ -138,15 +138,19 @@ const SsaoSchema = {
     ...QuadSchema,
     tDepth: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
 
-    uSamples: UniformSpec('v3[]'),
     dNSamples: DefineSpec('number'),
+    dMaxMipLevel: DefineSpec('number'),
 
-    uProjection: UniformSpec('m4'),
     uInvProjection: UniformSpec('m4'),
 
+    uViewport: UniformSpec('v4'),
+
     uTexSize: UniformSpec('v2'),
+    uIsOrtho: UniformSpec('b'),
 
     uRadius: UniformSpec('f'),
+    uIntensity: UniformSpec('f'),
+    uProjectionScale: UniformSpec('f'),
     uBias: UniformSpec('f'),
 };
 
@@ -157,20 +161,24 @@ function getSsaoRenderable(ctx: WebGLContext, depthTexture: Texture): SsaoRender
         ...QuadValues,
         tDepth: ValueCell.create(depthTexture),
 
-        uSamples: ValueCell.create([0.0, 0.0, 1.0]),
         dNSamples: ValueCell.create(1),
+        dMaxMipLevel: ValueCell.create(0),
 
-        uProjection: ValueCell.create(Mat4.identity()),
         uInvProjection: ValueCell.create(Mat4.identity()),
 
+        uViewport: ValueCell.create(Vec4.create(0.0, 0.0, 1.0, 1.0)),
+
         uTexSize: ValueCell.create(Vec2.create(ctx.gl.drawingBufferWidth, ctx.gl.drawingBufferHeight)),
+        uIsOrtho: ValueCell.create(false),
 
         uRadius: ValueCell.create(8.0),
+        uIntensity: ValueCell.create(1.0),
+        uProjectionScale: ValueCell.create(1.0),
         uBias: ValueCell.create(0.025),
     };
 
     const schema = { ...SsaoSchema };
-    const shaderCode = ShaderCode('ssao', quad_vert, ssao_frag);
+    const shaderCode = ShaderCode('ssao', quad_vert, ssao_frag, { standardDerivatives: 'optional', shaderTextureLod: 'optional' });
     const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
 
     return createComputeRenderable(renderItem, values);
@@ -180,6 +188,8 @@ const SsaoBlurSchema = {
     ...QuadSchema,
     tSsaoDepth: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
     uTexSize: UniformSpec('v2'),
+
+    uViewport: UniformSpec('v4'),
 
     uKernel: UniformSpec('f[]'),
     dOcclusionKernelSize: DefineSpec('number'),
@@ -201,6 +211,8 @@ function getSsaoBlurRenderable(ctx: WebGLContext, ssaoDepthTexture: Texture, dir
         ...QuadValues,
         tSsaoDepth: ValueCell.create(ssaoDepthTexture),
         uTexSize: ValueCell.create(Vec2.create(ssaoDepthTexture.getWidth(), ssaoDepthTexture.getHeight())),
+
+        uViewport: ValueCell.create(Vec4.create(0.0, 0.0, 1.0, 1.0)),
 
         uKernel: ValueCell.create([0.0]),
         dOcclusionKernelSize: ValueCell.create(1),
@@ -232,20 +244,6 @@ function getBlurKernel(kernelSize: number): number[] {
     }
 
     return kernel;
-}
-
-function getSamples(vectorSamples: Vec3[], nSamples: number): number[] {
-    let samples = [];
-    for (let i = 0; i < nSamples; i++) {
-        let scale = (i * i + 2.0 * i + 1) / (nSamples * nSamples);
-        scale = 0.1 + scale * (1.0 - 0.1);
-
-        samples.push(vectorSamples[i][0] * scale);
-        samples.push(vectorSamples[i][1] * scale);
-        samples.push(vectorSamples[i][2] * scale);
-    }
-
-    return samples;
 }
 
 const PostprocessingDepthMergeSchema = {
@@ -329,9 +327,10 @@ function getPostprocessingRenderable(ctx: WebGLContext, colorTexture: Texture, d
 export const PostprocessingParams = {
     occlusion: PD.MappedStatic('on', {
         on: PD.Group({
-            samples: PD.Numeric(64, {min: 1, max: 256, step: 1}),
-            radius: PD.Numeric(5, { min: 0, max: 10, step: 0.1 }, { description: 'Final radius is 2^x.' }),
-            bias: PD.Numeric(0.8, { min: 0, max: 3, step: 0.1 }),
+            samples: PD.Numeric(16, {min: 1, max: 98, step: 1}),
+            radius: PD.Numeric(5, { min: 0.1, max: 25, step: 0.1 }, { description: 'Final radius is 2^x.' }),
+            intensity: PD.Numeric(0.25, { min: 0, max: 2, step: 0.01}),
+            bias: PD.Numeric(1, { min: 0, max: 5, step: 0.1 }),
             blurKernelSize: PD.Numeric(25, { min: 1, max: 25, step: 2 }),
         }),
         off: PD.Group({})
@@ -397,12 +396,12 @@ export class PostprocessingPass {
 
     private readonly renderable: PostprocessingRenderable
 
-    private readonly _dynamicOutlinesSupported: boolean
-    public get dynamicOutlinesSupported() {
-        return this._dynamicOutlinesSupported;
+    private readonly _dynamicWidthOutlinesSupported: boolean
+    public get dynamicWidthOutlinesSupported() {
+        return this._dynamicWidthOutlinesSupported;
     }
 
-    static areDynamicOutlinesSupported(webgl: WebGLContext) {
+    static areDynamicWidthOutlinesSupported(webgl: WebGLContext) {
         const { extensions: { textureFloat, colorBufferFloat } } = webgl;
         if (!textureFloat || !colorBufferFloat) {
             if (isDebugMode) {
@@ -422,7 +421,7 @@ export class PostprocessingPass {
         const width = colorTarget.getWidth();
         const height = colorTarget.getHeight();
 
-        this._dynamicOutlinesSupported = PostprocessingPass.areDynamicOutlinesSupported(webgl);
+        this._dynamicWidthOutlinesSupported = PostprocessingPass.areDynamicWidthOutlinesSupported(webgl);
 
         this.drawPassDepthTexture = depthTexture;
 
@@ -497,15 +496,28 @@ export class PostprocessingPass {
             ValueCell.update(this.ssaoRenderable.values.uTexSize, Vec2.set(this.ssaoRenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.ssaoBlurFirstPassRenderable.values.uTexSize, Vec2.set(this.ssaoRenderable.values.uTexSize.ref.value, width, height));
             ValueCell.update(this.ssaoBlurSecondPassRenderable.values.uTexSize, Vec2.set(this.ssaoRenderable.values.uTexSize.ref.value, width, height));
+
+            let maxMipLevel = Math.floor(Math.log2(Math.max(width, height)));
+            if (this.ssaoRenderable.values.dMaxMipLevel.ref.value !== maxMipLevel) {
+                ValueCell.update(this.ssaoRenderable.values.dMaxMipLevel, maxMipLevel);
+                this.ssaoRenderable.update();
+            }
         }
     }
 
-    private updateState(camera: ICamera, scene: Scene, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
+    private setViewport(viewport: Vec4) {
+        ValueCell.update(this.ssaoRenderable.values.uViewport, Vec4.copy(this.ssaoRenderable.values.uViewport.ref.value, viewport));
+        ValueCell.update(this.ssaoBlurFirstPassRenderable.values.uViewport, Vec4.copy(this.ssaoBlurFirstPassRenderable.values.uViewport.ref.value, viewport));
+        ValueCell.update(this.ssaoBlurSecondPassRenderable.values.uViewport, Vec4.copy(this.ssaoBlurSecondPassRenderable.values.uViewport.ref.value, viewport));
+    }
+
+    private updateState(camera: ICamera, cameraEye: 'mono' | 'left' | 'right', scene: Scene, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
         const { x, y, width, height } = camera.viewport;
 
         const orthographic = camera.state.mode === 'orthographic' ? 1 : 0;
         const outlinesEnabled = props.outline.name !== 'off';
-        const outlinesDynamicWidth = props.outline.name === 'dynamicWidth' ? 1 : 0;
+        const outlinesDynamicWidth = props.outline.name === 'dynamicWidth' && this.dynamicWidthOutlinesSupported ? 1 : 0;
+        const outlinesDynamicWidthCompatibilityMode = props.outline.name === 'dynamicWidth' && !this.dynamicWidthOutlinesSupported;
         const occlusionEnabled = props.occlusion.name === 'on';
 
         let needsUpdateMain = false;
@@ -513,6 +525,14 @@ export class PostprocessingPass {
         let needsUpdateOutlinesStatic = false;
         let needsUpdateSsao = false;
         let needsUpdateSsaoBlur = false;
+
+        if (cameraEye === 'mono') {
+            this.setViewport(Vec4.create(0, 0, 1, 1));
+        } else if (cameraEye === 'left') {
+            this.setViewport(Vec4.create(0, 0, 0.5, 1));
+        } else if (cameraEye === 'right') {
+            this.setViewport(Vec4.create(0.5, 0, 0.5, 1));
+        }
 
         let invProjection = Mat4.identity();
         Mat4.invert(invProjection, camera.projection);
@@ -524,7 +544,21 @@ export class PostprocessingPass {
         this.maxPixelViewRadius = Math.abs((coord0[0] / coord0[3]) - (coord1[0] / coord1[3]));
 
         if (props.occlusion.name === 'on') {
-            ValueCell.updateIfChanged(this.ssaoRenderable.values.uProjection, camera.projection);
+            let radius = Math.pow(2, props.occlusion.params.radius);
+
+            // pixels-per-meter at z=-1
+            let projectionScale;
+            if (orthographic) {
+                projectionScale = height / (2 * Math.tan(camera.state.fov * 0.5) * Vec3.distance(camera.state.position, camera.state.target));
+            } else {
+                projectionScale = height / (2 * Math.tan(camera.state.fov * 0.5));
+            }
+
+            ValueCell.updateIfChanged(this.ssaoRenderable.values.uProjectionScale, projectionScale);
+            ValueCell.updateIfChanged(this.ssaoRenderable.values.uIsOrtho, orthographic === 1);
+            ValueCell.updateIfChanged(this.ssaoRenderable.values.uIntensity, props.occlusion.params.intensity);
+            ValueCell.updateIfChanged(this.ssaoRenderable.values.uBias, props.occlusion.params.bias);
+
             ValueCell.updateIfChanged(this.ssaoRenderable.values.uInvProjection, invProjection);
 
             ValueCell.updateIfChanged(this.ssaoBlurFirstPassRenderable.values.uNear, camera.near);
@@ -533,7 +567,7 @@ export class PostprocessingPass {
             ValueCell.updateIfChanged(this.ssaoBlurFirstPassRenderable.values.uFar, camera.far);
             ValueCell.updateIfChanged(this.ssaoBlurSecondPassRenderable.values.uFar, camera.far);
 
-            let maxPossibleViewZDiff = props.occlusion.params.radius / 16;
+            let maxPossibleViewZDiff = radius / 12;
             ValueCell.updateIfChanged(this.ssaoBlurFirstPassRenderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
             ValueCell.updateIfChanged(this.ssaoBlurSecondPassRenderable.values.uMaxPossibleViewZDiff, maxPossibleViewZDiff);
 
@@ -545,10 +579,9 @@ export class PostprocessingPass {
                 needsUpdateSsao = true;
 
                 this.nSamples = props.occlusion.params.samples;
-                ValueCell.updateIfChanged(this.ssaoRenderable.values.uSamples, getSamples(this.randomHemisphereVector, this.nSamples));
                 ValueCell.updateIfChanged(this.ssaoRenderable.values.dNSamples, this.nSamples);
             }
-            ValueCell.updateIfChanged(this.ssaoRenderable.values.uRadius, Math.pow(2, props.occlusion.params.radius));
+            ValueCell.updateIfChanged(this.ssaoRenderable.values.uRadius, radius);
             ValueCell.updateIfChanged(this.ssaoRenderable.values.uBias, props.occlusion.params.bias);
 
             if (this.blurKernelSize !== props.occlusion.params.blurKernelSize) {
@@ -585,7 +618,7 @@ export class PostprocessingPass {
                 ValueCell.updateIfChanged(this.outlinesJfaARenderable.values.uOutlineViewRadius, outlineViewWidth);
                 ValueCell.updateIfChanged(this.outlinesJfaBRenderable.values.uOutlineViewRadius, outlineViewWidth);
             } else {
-                let outlinePixelWidth = Math.ceil(this.webgl.pixelRatio * (props.outline.params.width - 1));
+                let outlinePixelWidth = outlinesDynamicWidthCompatibilityMode ? 0 : Math.ceil(this.webgl.pixelRatio * (props.outline.params.width - 1));
 
                 if (this.outlinesStaticRenderable.values.dOrthographic.ref.value !== orthographic) { needsUpdateOutlinesStatic = true; }
                 ValueCell.updateIfChanged(this.outlinesStaticRenderable.values.dOrthographic, orthographic);
@@ -708,10 +741,10 @@ export class PostprocessingPass {
         return readingA ? this.outlinesJfaATarget.texture : this.outlinesJfaBTarget.texture;
     }
 
-    render(camera: ICamera, scene: Scene, toDrawingBuffer: boolean, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
-        this.updateState(camera, scene, transparentBackground, backgroundColor, props);
+    render(camera: ICamera, cameraEye: 'mono' | 'left' | 'right', scene: Scene, toDrawingBuffer: boolean, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
+        this.updateState(camera, cameraEye, scene, transparentBackground, backgroundColor, props);
 
-        if (props.outline.name === 'staticWidth') {
+        if (props.outline.name === 'staticWidth' || (props.outline.name === 'dynamicWidth' && !this.dynamicWidthOutlinesSupported)) {
             this.outlinesTarget.bind();
             this.outlinesRenderable.render();
 

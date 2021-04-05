@@ -20,6 +20,7 @@ export default `
 //
 
 #define PI 3.14159265
+#define TWO_PI 6.283185307179586476925286766559
 #define RECIPROCAL_PI 0.31830988618
 #define EPSILON 1e-6
 
@@ -63,15 +64,15 @@ float unpackRGToUnitInterval(const in vec2 enc) {
     return dot(enc, vec2(255.0 / (256.0 * 256.0), 255.0 / 256.0));
 }
 
-vec3 screenSpaceToViewSpace(const in vec3 ssPos, const in mat4 invProjection) {
+vec3 screenSpaceToWorldSpace(const in vec3 ssPos, const in mat4 invProjectionView) {
     vec4 p = vec4(ssPos * 2.0 - 1.0, 1.0);
-    p = invProjection * p;
+    p = invProjectionView * p;
     return p.xyz / p.w;
 }
 
-void screenSpaceToViewRay(const in vec2 ssPos, const in mat4 invProjection, out vec3 rayOrigin, out vec3 rayDirection) {
-    rayOrigin = screenSpaceToViewSpace(vec3(ssPos, 0.0), invProjection);
-    vec3 rayEnd = screenSpaceToViewSpace(vec3(ssPos, 1.0), invProjection);
+void screenSpaceToWorldRay(const in vec2 ssPos, const in mat4 invProjectionView, out vec3 rayOrigin, out vec3 rayDirection) {
+    rayOrigin = screenSpaceToWorldSpace(vec3(ssPos, 0.0), invProjectionView);
+    vec3 rayEnd = screenSpaceToWorldSpace(vec3(ssPos, 1.0), invProjectionView);
     rayDirection = normalize(rayEnd - rayOrigin);
 }
 

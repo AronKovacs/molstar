@@ -38,8 +38,8 @@ bool isBackground(const in float depth) {
 }
 
 float getPixelViewSize(vec3 coords, vec2 invTexSize) {
-    float viewX1 = screenSpaceToViewSpace(coords - vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
-    float viewX2 = screenSpaceToViewSpace(coords + vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
+    float viewX1 = screenSpaceToWorldSpace(coords - vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
+    float viewX2 = screenSpaceToWorldSpace(coords + vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
     return abs(viewX2 - viewX1);
 }
 

@@ -37,6 +37,7 @@ export namespace BaseGeometry {
     export const Params = {
         alpha: PD.Numeric(1, { min: 0, max: 1, step: 0.01 }, { label: 'Opacity', isEssential: true, description: 'How opaque/transparent the representation is rendered.' }),
         quality: PD.Select<VisualQuality>('auto', VisualQualityOptions, { isEssential: true, description: 'Visual/rendering quality of the representation.' }),
+        cutaway: PD.Boolean(false),
     };
     export type Params = typeof Params
 
@@ -65,11 +66,13 @@ export namespace BaseGeometry {
             uVertexCount: ValueCell.create(counts.vertexCount),
             uGroupCount: ValueCell.create(counts.groupCount),
             drawCount: ValueCell.create(counts.drawCount),
+            cutaway: ValueCell.create(props.cutaway),
         };
     }
 
     export function updateValues(values: BaseValues, props: PD.Values<Params>) {
         ValueCell.updateIfChanged(values.alpha, props.alpha); // `uAlpha` is set in renderable.render
+        ValueCell.updateIfChanged(values.cutaway, props.cutaway);
     }
 
     export function createRenderableState(props: Partial<PD.Values<Params>> = {}): RenderableState {

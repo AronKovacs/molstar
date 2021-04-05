@@ -24,7 +24,7 @@ const Canvas3DPresets = {
             mode: 'temporal' as Canvas3DProps['multiSample']['mode']
         },
         postprocessing: {
-            occlusion: { name: 'on', params: { samples: 64, radius: 8, bias: 1.0, blurKernelSize: 13 } },
+            occlusion: { name: 'on', params: { samples: 64, radius: 8, intensity: 5.0, bias: 1.0, blurKernelSize: 13 } },
             outline: { name: 'staticWidth', params: { width: 1, threshold: 0.33 } }
         },
         renderer: {
@@ -37,7 +37,7 @@ const Canvas3DPresets = {
             mode: 'temporal' as Canvas3DProps['multiSample']['mode']
         },
         postprocessing: {
-            occlusion: { name: 'on', params: { samples: 64, radius: 8, bias: 1.0, blurKernelSize: 13 } },
+            occlusion: { name: 'on', params: { samples: 64, radius: 8, intensity: 5.0, bias: 1.0, blurKernelSize: 13 } },
             outline: { name: 'off', params: { } }
         },
         renderer: {

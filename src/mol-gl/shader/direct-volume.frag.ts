@@ -30,7 +30,10 @@ uniform mat4 uProjection, uTransform, uModelView, uModel, uView;
 uniform vec3 uCameraDir;
 
 uniform sampler2D tDepth;
+
+// FIXME
 uniform vec2 uDrawingBufferSize;
+#define DrawingBufferSizeAlreadyDefined
 
 varying vec3 vOrigPos;
 varying float vInstance;

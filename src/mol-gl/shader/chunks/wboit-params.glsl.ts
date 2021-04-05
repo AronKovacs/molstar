@@ -1,6 +1,9 @@
 export default `
 // FIXME
-uniform vec2 uDrawingBufferSize;
+#ifndef DrawingBufferSizeAlreadyDefined
+    uniform vec2 uDrawingBufferSize;
+#endif
+
 #if defined(dRenderVariant_colorWboit)
     #if !defined(dRenderMode_volume) && !defined(dRenderMode_isosurface)
         uniform sampler2D tDepth;

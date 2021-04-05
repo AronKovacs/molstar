@@ -48,14 +48,14 @@ interface Renderer {
     update: (camera: ICamera) => void
 
     renderPick: (group: Scene.Group, camera: ICamera, variant: GraphicsRenderVariant, depthTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderDepth: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderBlended: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderBlendedOpaque: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderBlendedTransparent: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderBlendedVolumeOpaque: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderBlendedVolumeTransparent: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderWboitOpaque: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderWboitTransparent: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => void
+    renderDepth: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthCutawayTexture: Texture | null, hullExpansionSize: number) => void
+    renderBlended: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
+    renderBlendedOpaque: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
+    renderBlendedTransparent: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
+    renderBlendedVolumeOpaque: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
+    renderBlendedVolumeTransparent: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
+    renderWboitOpaque: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
+    renderWboitTransparent: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
 
     setProps: (props: Partial<RendererProps>) => void
     setViewport: (x: number, y: number, width: number, height: number) => void
@@ -63,6 +63,11 @@ interface Renderer {
     setDrawingBufferSize: (width: number, height: number) => void
 
     dispose: () => void
+}
+
+export class CutawayData {
+    depthPreCutawayTexture: Texture | null
+    depthCutawayTexture: Texture | null
 }
 
 export const RendererParams = {
@@ -237,6 +242,7 @@ namespace Renderer {
             uFogFar: ValueCell.create(10000),
             uFogColor: ValueCell.create(bgColor),
 
+            uHullExpansionSize: ValueCell.create(0),
             uCutaway: ValueCell.create(false),
             uRenderWboit: ValueCell.create(false),
 
@@ -370,10 +376,10 @@ namespace Renderer {
             ValueCell.updateIfChanged(globalUniforms.uTransparentBackground, transparentBackground);
         };
 
-        const updateInternal = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null, renderWboit: boolean) => {
+        const updateInternal = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null, renderWboit: boolean, hullExpansionSize: number = 0.0) => {
             arrayMapUpsert(sharedTexturesList, 'tDepth', depthTexture || nullDepthTexture);
-            arrayMapUpsert(sharedTexturesList, 'tDepthPreCutaway', depthPreCutawayTexture || nullDepthCutawayTexture);
-            arrayMapUpsert(sharedTexturesList, 'tDepthCutaway', depthCutawayTexture || nullDepthCutawayTexture);
+            arrayMapUpsert(sharedTexturesList, 'tDepthPreCutaway', cutawayData !== null ? (cutawayData.depthPreCutawayTexture || nullDepthCutawayTexture) : nullDepthCutawayTexture);
+            arrayMapUpsert(sharedTexturesList, 'tDepthCutaway', cutawayData !== null ? (cutawayData.depthCutawayTexture || nullDepthCutawayTexture) : nullDepthCutawayTexture);
 
             ValueCell.update(globalUniforms.uModel, group.view);
             ValueCell.update(globalUniforms.uModelView, Mat4.mul(modelView, group.view, camera.view));
@@ -381,7 +387,8 @@ namespace Renderer {
             ValueCell.update(globalUniforms.uModelViewProjection, Mat4.mul(modelViewProjection, modelView, camera.projection));
             ValueCell.update(globalUniforms.uInvModelViewProjection, Mat4.invert(invModelViewProjection, modelViewProjection));
 
-            ValueCell.updateIfChanged(globalUniforms.uCutaway, depthCutawayTexture !== null);
+            ValueCell.updateIfChanged(globalUniforms.uHullExpansionSize, hullExpansionSize);
+            ValueCell.updateIfChanged(globalUniforms.uCutaway, cutawayData !== null && cutawayData.depthCutawayTexture !== null);
             ValueCell.updateIfChanged(globalUniforms.uRenderWboit, renderWboit);
 
             state.enable(gl.SCISSOR_TEST);
@@ -400,7 +407,7 @@ namespace Renderer {
             state.enable(gl.DEPTH_TEST);
             state.depthMask(true);
 
-            updateInternal(group, camera, depthTexture, null, depthCutawayTexture, false);
+            updateInternal(group, camera, depthTexture, { depthPreCutawayTexture: null, depthCutawayTexture }, false);
 
             const { renderables } = group;
             for (let i = 0, il = renderables.length; i < il; ++i) {
@@ -410,12 +417,12 @@ namespace Renderer {
             }
         };
 
-        const renderDepth = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthCutawayTexture: Texture | null) => {
+        const renderDepth = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthCutawayTexture: Texture | null, hullExpansionSize: number = 0) => {
             state.disable(gl.BLEND);
             state.enable(gl.DEPTH_TEST);
             state.depthMask(true);
 
-            updateInternal(group, camera, depthTexture, null, depthCutawayTexture, false);
+            updateInternal(group, camera, depthTexture, { depthPreCutawayTexture: null, depthCutawayTexture }, false, hullExpansionSize);
 
             const { renderables } = group;
             for (let i = 0, il = renderables.length; i < il; ++i) {
@@ -423,17 +430,17 @@ namespace Renderer {
             }
         };
 
-        const renderBlended = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => {
-            renderBlendedOpaque(group, camera, depthTexture, depthPreCutawayTexture, depthCutawayTexture);
-            renderBlendedTransparent(group, camera, depthTexture, depthPreCutawayTexture, depthCutawayTexture);
+        const renderBlended = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => {
+            renderBlendedOpaque(group, camera, depthTexture, cutawayData);
+            renderBlendedTransparent(group, camera, depthTexture, cutawayData);
         };
 
-        const renderBlendedOpaque = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => {
+        const renderBlendedOpaque = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => {
             state.disable(gl.BLEND);
             state.enable(gl.DEPTH_TEST);
             state.depthMask(true);
 
-            updateInternal(group, camera, depthTexture, depthPreCutawayTexture, depthCutawayTexture, false);
+            updateInternal(group, camera, depthTexture, cutawayData, false);
 
             const { renderables } = group;
             for (let i = 0, il = renderables.length; i < il; ++i) {
@@ -444,10 +451,10 @@ namespace Renderer {
             }
         };
 
-        const renderBlendedTransparent = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => {
+        const renderBlendedTransparent = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => {
             state.enable(gl.DEPTH_TEST);
 
-            updateInternal(group, camera, depthTexture, depthPreCutawayTexture, depthCutawayTexture, false);
+            updateInternal(group, camera, depthTexture, cutawayData, false);
 
             const { renderables } = group;
 
@@ -475,11 +482,11 @@ namespace Renderer {
             }
         };
 
-        const renderBlendedVolumeOpaque = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => {
+        const renderBlendedVolumeOpaque = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => {
             state.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
             state.enable(gl.BLEND);
 
-            updateInternal(group, camera, depthTexture, depthPreCutawayTexture, depthCutawayTexture, false);
+            updateInternal(group, camera, depthTexture, cutawayData, false);
 
             const { renderables } = group;
             for (let i = 0, il = renderables.length; i < il; ++i) {
@@ -494,11 +501,11 @@ namespace Renderer {
             }
         };
 
-        const renderBlendedVolumeTransparent = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => {
+        const renderBlendedVolumeTransparent = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => {
             state.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
             state.enable(gl.BLEND);
 
-            updateInternal(group, camera, depthTexture, depthPreCutawayTexture, depthCutawayTexture, false);
+            updateInternal(group, camera, depthTexture, cutawayData, false);
 
             const { renderables } = group;
             for (let i = 0, il = renderables.length; i < il; ++i) {
@@ -513,12 +520,12 @@ namespace Renderer {
             }
         };
 
-        const renderWboitOpaque = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => {
+        const renderWboitOpaque = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => {
             state.disable(gl.BLEND);
             state.enable(gl.DEPTH_TEST);
             state.depthMask(true);
 
-            updateInternal(group, camera, depthTexture, depthPreCutawayTexture, depthCutawayTexture, false);
+            updateInternal(group, camera, depthTexture, cutawayData, false);
 
             const { renderables } = group;
             for (let i = 0, il = renderables.length; i < il; ++i) {
@@ -533,8 +540,8 @@ namespace Renderer {
             }
         };
 
-        const renderWboitTransparent = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthPreCutawayTexture: Texture | null, depthCutawayTexture: Texture | null) => {
-            updateInternal(group, camera, depthTexture, depthPreCutawayTexture, depthCutawayTexture, true);
+        const renderWboitTransparent = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => {
+            updateInternal(group, camera, depthTexture, cutawayData, true);
 
             const { renderables } = group;
             for (let i = 0, il = renderables.length; i < il; ++i) {

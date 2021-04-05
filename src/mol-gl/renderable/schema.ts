@@ -159,6 +159,7 @@ export const GlobalUniformSchema = {
     uHighlightColor: UniformSpec('v3'),
     uSelectColor: UniformSpec('v3'),
 
+    uHullExpansionSize: UniformSpec('f'),
     uCutaway: UniformSpec('b'),
     uRenderWboit: UniformSpec('b'),
 } as const;
@@ -278,6 +279,8 @@ export const BaseSchema = {
     boundingSphere: ValueSpec('sphere'),
     /** bounding sphere NOT taking aTransform into account */
     invariantBoundingSphere: ValueSpec('sphere'),
+
+    cutaway: ValueSpec('boolean'),
 } as const;
 export type BaseSchema = typeof BaseSchema
 export type BaseValues = Values<BaseSchema>

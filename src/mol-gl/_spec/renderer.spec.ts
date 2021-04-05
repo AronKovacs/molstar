@@ -87,6 +87,8 @@ function createPoints() {
         dPointSizeAttenuation: ValueCell.create(true),
         dPointFilledCircle: ValueCell.create(false),
         uPointEdgeBleach: ValueCell.create(0.5),
+
+        cutaway: ValueCell.create(false),
     };
     const state: RenderableState = {
         visible: true,

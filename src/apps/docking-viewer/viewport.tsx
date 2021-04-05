@@ -48,6 +48,7 @@ function occlusionStyle(plugin: PluginContext) {
             occlusion: { name: 'on', params: {
                 samples: 64,
                 radius: 8,
+                intensity: 5.0,
                 bias: 1.0,
                 blurKernelSize: 13
             } },

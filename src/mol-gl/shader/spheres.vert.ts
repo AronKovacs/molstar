@@ -15,6 +15,8 @@ precision highp int;
 #include size_vert_params
 #include common_clip
 
+uniform float uHullExpansionSize;
+
 uniform mat4 uModelView;
 uniform mat4 uInvProjection;
 
@@ -81,6 +83,7 @@ void main(void){
     #include assign_clipping_varying
     #include assign_size
 
+    // size += uHullExpansionSize;
     vRadius = size * matrixScale(uModelView);
 
     vec4 position4 = vec4(aPosition, 1.0);

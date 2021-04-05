@@ -185,7 +185,7 @@ export interface Texture {
     bind: (id: TextureId) => void
     unbind: (id: TextureId) => void
     /** Use `layer` to attach a z-slice of a 3D texture */
-    attachFramebuffer: (framebuffer: Framebuffer, attachment: TextureAttachment, layer?: number) => void
+    attachFramebuffer: (framebuffer: Framebuffer, attachment: TextureAttachment, layer?: number, level?: number) => void
     detachFramebuffer: (framebuffer: Framebuffer, attachment: TextureAttachment) => void
 
     reset: () => void
@@ -287,15 +287,20 @@ export function createTexture(gl: GLRenderingContext, extensions: WebGLExtension
         loadedData = data;
     }
 
-    function attachFramebuffer(framebuffer: Framebuffer, attachment: TextureAttachment, layer?: number) {
+    function attachFramebuffer(framebuffer: Framebuffer, attachment: TextureAttachment, layer?: number, level?: number) {
         framebuffer.bind();
-        if (target === gl.TEXTURE_2D) {
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, getAttachment(gl, extensions, attachment), gl.TEXTURE_2D, texture, 0);
-        } else if (isWebGL2(gl) && target === gl.TEXTURE_3D) {
-            if (layer === undefined) throw new Error('need `layer` to attach 3D texture');
-            gl.framebufferTextureLayer(gl.FRAMEBUFFER, getAttachment(gl, extensions, attachment), texture, 0, layer);
+        let mipLevel = level || 0;
+        if (level === 0 || (level !== 0 && isWebGL2(gl))) {
+            if (target === gl.TEXTURE_2D) {
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, getAttachment(gl, extensions, attachment), gl.TEXTURE_2D, texture, mipLevel);
+            } else if (isWebGL2(gl) && target === gl.TEXTURE_3D) {
+                if (layer === undefined) throw new Error('need `layer` to attach 3D texture');
+                gl.framebufferTextureLayer(gl.FRAMEBUFFER, getAttachment(gl, extensions, attachment), texture, mipLevel, layer);
+            } else {
+                throw new Error('unknown texture target');
+            }
         } else {
-            throw new Error('unknown texture target');
+            throw new Error('level must be 0');
         }
     }
 

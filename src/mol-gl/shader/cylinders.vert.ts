@@ -36,6 +36,8 @@ varying float vCap;
 uniform float uIsOrtho;
 uniform vec3 uCameraDir;
 
+uniform float uHullExpansionSize;
+
 void main() {
     #include assign_group
     #include assign_color_varying
@@ -45,15 +47,17 @@ void main() {
 
     mat4 modelTransform = uModel * aTransform;
 
+    size += uHullExpansionSize;
     vTransform = aTransform;
-    vStart = (modelTransform * vec4(aStart, 1.0)).xyz;
-    vEnd = (modelTransform * vec4(aEnd, 1.0)).xyz;
+    vec3 dir = normalize(aEnd - aStart);
+    vStart = (modelTransform * vec4(aStart - dir * uHullExpansionSize / 2.0, 1.0)).xyz;
+    vEnd = (modelTransform * vec4(aEnd + dir * uHullExpansionSize / 2.0, 1.0)).xyz;
     vSize = size * aScale;
     vCap = aCap;
 
     vModelPosition = (vStart + vEnd) * 0.5;
     vec3 camDir = -mix(normalize(vModelPosition - uCameraPosition), uCameraDir, uIsOrtho);
-    vec3 dir = vEnd - vStart;
+    //vec3 dir = vEnd - vStart;
     // ensure cylinder 'dir' is pointing towards the camera
     if(dot(camDir, dir) < 0.0) dir = -dir;
 

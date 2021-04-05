@@ -12,6 +12,10 @@ precision highp sampler2D;
 uniform sampler2D tSsaoDepth;
 uniform vec2 uTexSize;
 
+// needed for stereo camera
+// x, y, width, height, all <0, 1>
+uniform vec4 uViewport;
+
 uniform float uKernel[dOcclusionKernelSize];
 
 uniform float uBlurDirectionX;
@@ -33,7 +37,7 @@ float getViewZ(const in float depth) {
 }
 
 bool isBackground(const in float depth) {
-    return depth == 1.0;
+    return depth > 0.99;
 }
 
 void main(void) {
@@ -57,6 +61,13 @@ void main(void) {
     // only if kernelSize is odd
     for (int i = -dOcclusionKernelSize / 2; i <= dOcclusionKernelSize / 2; i++) {
         vec2 sampleCoords = coords + float(i) * offset;
+
+        if (sampleCoords.x < uViewport.x ||
+            sampleCoords.x > uViewport.x + uViewport.z ||
+            sampleCoords.y < uViewport.y ||
+            sampleCoords.y > uViewport.y + uViewport.w) {
+            continue;
+        }
 
         vec4 sampleSsaoDepth = texture2D(tSsaoDepth, sampleCoords);
 
