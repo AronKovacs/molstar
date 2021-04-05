@@ -511,7 +511,7 @@ export class PostprocessingPass {
         ValueCell.update(this.ssaoBlurSecondPassRenderable.values.uViewport, Vec4.copy(this.ssaoBlurSecondPassRenderable.values.uViewport.ref.value, viewport));
     }
 
-    private updateState(camera: ICamera, cameraEye: 'mono' | 'left' | 'right', scene: Scene, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
+    private updateState(camera: ICamera, scene: Scene, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
         const { x, y, width, height } = camera.viewport;
 
         const orthographic = camera.state.mode === 'orthographic' ? 1 : 0;
@@ -526,12 +526,13 @@ export class PostprocessingPass {
         let needsUpdateSsao = false;
         let needsUpdateSsaoBlur = false;
 
-        if (cameraEye === 'mono') {
-            this.setViewport(Vec4.create(0, 0, 1, 1));
-        } else if (cameraEye === 'left') {
-            this.setViewport(Vec4.create(0, 0, 0.5, 1));
-        } else if (cameraEye === 'right') {
-            this.setViewport(Vec4.create(0.5, 0, 0.5, 1));
+        {
+            let x = camera.viewport.x / this.target.getWidth();
+            let width = camera.viewport.width / this.target.getWidth();
+            let y = camera.viewport.y / this.target.getHeight();
+            let height = camera.viewport.height / this.target.getHeight();
+
+            this.setViewport(Vec4.create(x, y, width, height));
         }
 
         let invProjection = Mat4.identity();
@@ -741,8 +742,8 @@ export class PostprocessingPass {
         return readingA ? this.outlinesJfaATarget.texture : this.outlinesJfaBTarget.texture;
     }
 
-    render(camera: ICamera, cameraEye: 'mono' | 'left' | 'right', scene: Scene, toDrawingBuffer: boolean, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
-        this.updateState(camera, cameraEye, scene, transparentBackground, backgroundColor, props);
+    render(camera: ICamera, scene: Scene, toDrawingBuffer: boolean, transparentBackground: boolean, backgroundColor: Color, props: PostprocessingProps) {
+        this.updateState(camera, scene, transparentBackground, backgroundColor, props);
 
         if (props.outline.name === 'staticWidth' || (props.outline.name === 'dynamicWidth' && !this.dynamicWidthOutlinesSupported)) {
             this.outlinesTarget.bind();

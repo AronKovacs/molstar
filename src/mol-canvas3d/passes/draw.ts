@@ -304,7 +304,7 @@ export class DrawPass {
         return true;
     }
 
-    private _renderWboit(renderer: Renderer, camera: ICamera, cameraEye: 'mono' | 'left' | 'right', scene: Scene, transparentBackground: boolean, postprocessingProps: PostprocessingProps) {
+    private _renderWboit(renderer: Renderer, camera: ICamera, scene: Scene, transparentBackground: boolean, postprocessingProps: PostprocessingProps) {
         if (!this.wboit?.supported) throw new Error('expected wboit to be supported');
 
         this.colorTarget.bind();
@@ -378,7 +378,7 @@ export class DrawPass {
             if (postprocessingProps.occlusion.name === 'on') {
                 this._hierarchicalZ(camera);
             }
-            this.postprocessing.render(camera, cameraEye, scene, false, transparentBackground, renderer.props.backgroundColor, postprocessingProps);
+            this.postprocessing.render(camera, scene, false, transparentBackground, renderer.props.backgroundColor, postprocessingProps);
             depthTexture = this.postprocessing.getDepthTarget(postprocessingProps);
         }
 
@@ -403,7 +403,7 @@ export class DrawPass {
         this.wboit.render();
     }
 
-    private _renderBlended(renderer: Renderer, camera: ICamera, cameraEye: 'mono' | 'left' | 'right', scene: Scene, toDrawingBuffer: boolean, transparentBackground: boolean, postprocessingProps: PostprocessingProps) {
+    private _renderBlended(renderer: Renderer, camera: ICamera, scene: Scene, toDrawingBuffer: boolean, transparentBackground: boolean, postprocessingProps: PostprocessingProps) {
         if (toDrawingBuffer) {
             this.drawTarget.bind();
         } else {
@@ -450,7 +450,7 @@ export class DrawPass {
                 if (postprocessingProps.occlusion.name === 'on') {
                     this._hierarchicalZ(camera);
                 }
-                this.postprocessing.render(camera, cameraEye, scene, false, transparentBackground, renderer.props.backgroundColor, postprocessingProps);
+                this.postprocessing.render(camera, scene, false, transparentBackground, renderer.props.backgroundColor, postprocessingProps);
             }
             renderer.renderBlendedVolumeTransparent(scene.volumes, camera, this.depthTexturePrimitives, null);
 
@@ -465,7 +465,7 @@ export class DrawPass {
         renderer.renderBlendedTransparent(scene.primitives, camera, null, null);
     }
 
-    private _render(renderer: Renderer, camera: ICamera, cameraEye: 'mono' | 'left' | 'right', scene: Scene, helper: Helper, toDrawingBuffer: boolean, transparentBackground: boolean, postprocessingProps: PostprocessingProps) {
+    private _render(renderer: Renderer, camera: ICamera, scene: Scene, helper: Helper, toDrawingBuffer: boolean, transparentBackground: boolean, postprocessingProps: PostprocessingProps) {
         const volumeRendering = scene.volumes.renderables.length > 0;
         const postprocessingEnabled = PostprocessingPass.isEnabled(postprocessingProps);
         const antialiasingEnabled = AntialiasingPass.isEnabled(postprocessingProps);
@@ -475,9 +475,9 @@ export class DrawPass {
         renderer.update(camera);
 
         if (this.wboitEnabled) {
-            this._renderWboit(renderer, camera, cameraEye, scene, transparentBackground, postprocessingProps);
+            this._renderWboit(renderer, camera, scene, transparentBackground, postprocessingProps);
         } else {
-            this._renderBlended(renderer, camera, cameraEye, scene, !volumeRendering && !postprocessingEnabled && !antialiasingEnabled && toDrawingBuffer, transparentBackground, postprocessingProps);
+            this._renderBlended(renderer, camera, scene, !volumeRendering && !postprocessingEnabled && !antialiasingEnabled && toDrawingBuffer, transparentBackground, postprocessingProps);
         }
 
         if (PostprocessingPass.isEnabled(postprocessingProps)) {
@@ -522,10 +522,10 @@ export class DrawPass {
         renderer.setDrawingBufferSize(this.colorTarget.getWidth(), this.colorTarget.getHeight());
 
         if (StereoCamera.is(camera)) {
-            this._render(renderer, camera.left, 'left', scene, helper, toDrawingBuffer, transparentBackground, postprocessingProps);
-            this._render(renderer, camera.right, 'right', scene, helper, toDrawingBuffer, transparentBackground, postprocessingProps);
+            this._render(renderer, camera.left, scene, helper, toDrawingBuffer, transparentBackground, postprocessingProps);
+            this._render(renderer, camera.right, scene, helper, toDrawingBuffer, transparentBackground, postprocessingProps);
         } else {
-            this._render(renderer, camera, 'mono', scene, helper, toDrawingBuffer, transparentBackground, postprocessingProps);
+            this._render(renderer, camera, scene, helper, toDrawingBuffer, transparentBackground, postprocessingProps);
         }
     }
 

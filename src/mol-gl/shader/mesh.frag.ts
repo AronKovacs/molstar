@@ -52,7 +52,7 @@ void main() {
 
     #if defined(dRenderVariant_color)
         if (!(!interior && !isOnSurface)) {
-            material.rgb = vec3(0.88, 0.45, 0.0);
+            material.rgb *= 0.5;
         }
     #endif
 
