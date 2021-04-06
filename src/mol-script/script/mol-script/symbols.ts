@@ -5,13 +5,13 @@
  */
 
 import { UniqueArray } from '../../../mol-data/generic';
-import Expression from '../../language/expression';
+import { Expression } from '../../language/expression';
 import { Argument, MSymbol, Arguments } from '../../language/symbol';
 import { MolScriptSymbolTable as MolScript } from '../../language/symbol-table';
-import Type from '../../language/type';
+import { Type } from '../../language/type';
 import { Types as StructureQueryTypes } from '../../language/symbol-table/structure-query';
 import { MolScriptBuilder as B } from '../../language/builder';
-import { getPositionalArgs, tryGetArg } from './macro';
+import { getPositionalArgs, tryGetArg } from './script-macro';
 
 export type MolScriptSymbol =
     | { kind: 'alias', aliases: string[], symbol: MSymbol }
@@ -138,6 +138,7 @@ export const SymbolTable = [
             Alias(MolScript.structureQuery.modifier.union, 'sel.atom.union'),
             Alias(MolScript.structureQuery.modifier.cluster, 'sel.atom.cluster'),
             Alias(MolScript.structureQuery.modifier.includeSurroundings, 'sel.atom.include-surroundings'),
+            Alias(MolScript.structureQuery.modifier.surroundingLigands, 'sel.atom.surrounding-ligands'),
             Alias(MolScript.structureQuery.modifier.includeConnected, 'sel.atom.include-connected'),
             Alias(MolScript.structureQuery.modifier.expandProperty, 'sel.atom.expand-property'),
 

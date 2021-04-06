@@ -4,38 +4,36 @@
  * @author David Sehnal <david.sehnal@gmail.com>
  */
 
+import { PDBeStructureQualityReport } from '../../extensions/pdbe';
 import { EmptyLoci } from '../../mol-model/loci';
 import { StructureSelection } from '../../mol-model/structure';
-import { createPlugin, DefaultPluginSpec } from '../../mol-plugin';
 import { AnimateModelIndex } from '../../mol-plugin-state/animation/built-in/model-index';
 import { BuiltInTrajectoryFormat } from '../../mol-plugin-state/formats/trajectory';
+import { createPlugin } from '../../mol-plugin-ui';
+import { PluginUIContext } from '../../mol-plugin-ui/context';
+import { DefaultPluginUISpec } from '../../mol-plugin-ui/spec';
 import { PluginCommands } from '../../mol-plugin/commands';
-import { PluginContext } from '../../mol-plugin/context';
 import { Script } from '../../mol-script/script';
+import { Asset } from '../../mol-util/assets';
 import { Color } from '../../mol-util/color';
 import { StripedResidues } from './coloring';
 import { CustomToastMessage } from './controls';
 import './index.html';
 import { buildStaticSuperposition, dynamicSuperpositionTest, StaticSuperpositionTestData } from './superposition';
-import { PDBeStructureQualityReport } from '../../extensions/pdbe';
-import { Asset } from '../../mol-util/assets';
 require('mol-plugin-ui/skin/light.scss');
 
 type LoadParams = { url: string, format?: BuiltInTrajectoryFormat, isBinary?: boolean, assemblyId?: string }
 
 class BasicWrapper {
-    plugin: PluginContext;
+    plugin: PluginUIContext;
 
     init(target: string | HTMLElement) {
         this.plugin = createPlugin(typeof target === 'string' ? document.getElementById(target)! : target, {
-            ...DefaultPluginSpec,
+            ...DefaultPluginUISpec(),
             layout: {
                 initial: {
                     isExpanded: false,
                     showControls: false
-                },
-                controls: {
-                    // left: 'none'
                 }
             },
             components: {
@@ -82,13 +80,17 @@ class BasicWrapper {
         if (!this.plugin.canvas3d.props.trackball.spin) PluginCommands.Camera.Reset(this.plugin, {});
     }
 
+    private animateModelIndexTargetFps() {
+        return Math.max(1, this.animate.modelIndex.targetFps | 0);
+    }
+
     animate = {
         modelIndex: {
-            maxFPS: 8,
-            onceForward: () => { this.plugin.managers.animation.play(AnimateModelIndex, { maxFPS: Math.max(0.5, this.animate.modelIndex.maxFPS | 0), mode: { name: 'once', params: { direction: 'forward' } } }); },
-            onceBackward: () => { this.plugin.managers.animation.play(AnimateModelIndex, { maxFPS: Math.max(0.5, this.animate.modelIndex.maxFPS | 0), mode: { name: 'once', params: { direction: 'backward' } } }); },
-            palindrome: () => { this.plugin.managers.animation.play(AnimateModelIndex, { maxFPS: Math.max(0.5, this.animate.modelIndex.maxFPS | 0), mode: { name: 'palindrome', params: {} } }); },
-            loop: () => { this.plugin.managers.animation.play(AnimateModelIndex, { maxFPS: Math.max(0.5, this.animate.modelIndex.maxFPS | 0), mode: { name: 'loop', params: {} } }); },
+            targetFps: 8,
+            onceForward: () => { this.plugin.managers.animation.play(AnimateModelIndex, { duration: { name: 'computed', params: { targetFps: this.animateModelIndexTargetFps() } }, mode: { name: 'once', params: { direction: 'forward' } } }); },
+            onceBackward: () => { this.plugin.managers.animation.play(AnimateModelIndex, { duration: { name: 'computed', params: { targetFps: this.animateModelIndexTargetFps() } }, mode: { name: 'once', params: { direction: 'backward' } } }); },
+            palindrome: () => { this.plugin.managers.animation.play(AnimateModelIndex, { duration: { name: 'computed', params: { targetFps: this.animateModelIndexTargetFps() } }, mode: { name: 'palindrome', params: {} } }); },
+            loop: () => { this.plugin.managers.animation.play(AnimateModelIndex, { duration: { name: 'computed', params: { targetFps: this.animateModelIndexTargetFps() } }, mode: { name: 'loop', params: { direction: 'forward' } } }); },
             stop: () => this.plugin.managers.animation.stop()
         }
     }

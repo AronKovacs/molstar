@@ -102,11 +102,24 @@ export function includesUnitKind(unitKinds: UnitKind[], unit: Unit) {
 
 const DefaultMaxCells = 500_000_000;
 
-/** guard against overly high resolution for the given box size */
+export function getVolumeSliceInfo(box: Box3D, resolution: number, maxCells = DefaultMaxCells) {
+    const size = Box3D.size(Vec3(), box);
+    Vec3.ceil(size, size);
+    size.sort((a, b) => b - a); // descending
+    const maxAreaCells = Math.floor(Math.cbrt(maxCells) * Math.cbrt(maxCells));
+    const area = size[0] * size[1];
+    const areaCells = Math.ceil(area / (resolution * resolution));
+    return { area, areaCells, maxAreaCells };
+}
+
+/**
+ * Guard against overly high resolution for the given box size.
+ * Internally it uses the largest 2d slice of the box to determine the
+ * maximum resolution to account for the 2d texture layout on the GPU.
+ */
 export function ensureReasonableResolution<T>(box: Box3D, props: { resolution: number } & T, maxCells = DefaultMaxCells) {
-    const volume = Box3D.volume(box);
-    const approxCells = volume / props.resolution;
-    const resolution = approxCells > maxCells ? volume / maxCells : props.resolution;
+    const { area, areaCells, maxAreaCells } = getVolumeSliceInfo(box, props.resolution, maxCells);
+    const resolution = areaCells > maxAreaCells ? Math.sqrt(area / maxAreaCells) : props.resolution;
     return { ...props, resolution };
 }
 

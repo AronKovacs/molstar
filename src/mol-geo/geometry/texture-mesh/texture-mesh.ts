@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019-2020 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2019-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
@@ -21,7 +21,6 @@ import { TextureMeshValues } from '../../../mol-gl/renderable/texture-mesh';
 import { calculateTransformBoundingSphere } from '../../../mol-gl/renderable/util';
 import { Texture } from '../../../mol-gl/webgl/texture';
 import { Vec2, Vec4 } from '../../../mol-math/linear-algebra';
-import { fillSerial } from '../../../mol-util/array';
 import { createEmptyClipping } from '../clipping-data';
 import { NullLocation } from '../../../mol-model/location';
 
@@ -34,23 +33,50 @@ export interface TextureMesh {
     groupCount: number,
 
     readonly geoTextureDim: ValueCell<Vec2>,
-    /** texture has vertex positions in XYZ and group id in W */
-    readonly vertexGroupTexture: ValueCell<Texture>,
+    readonly vertexTexture: ValueCell<Texture>,
+    readonly groupTexture: ValueCell<Texture>,
     readonly normalTexture: ValueCell<Texture>,
+    readonly doubleBuffer: TextureMesh.DoubleBuffer
 
     readonly boundingSphere: Sphere3D
 }
 
 export namespace TextureMesh {
-    export function create(vertexCount: number, groupCount: number, vertexGroupTexture: Texture, normalTexture: Texture, boundingSphere: Sphere3D, textureMesh?: TextureMesh): TextureMesh {
-        const width = vertexGroupTexture.getWidth();
-        const height = vertexGroupTexture.getHeight();
+    export class DoubleBuffer {
+        private index = 0;
+        private textures: ({ vertex: Texture, group: Texture, normal: Texture } | undefined)[] = []
+
+        get() {
+            return this.textures[this.index];
+        }
+
+        set(vertex: Texture, group: Texture, normal: Texture) {
+            this.textures[this.index] = Object.assign(this.textures[this.index] || {}, {
+                vertex, group, normal
+            });
+            this.index = (this.index + 1) % 2;
+        }
+
+        destroy() {
+            for (const buffer of this.textures) {
+                buffer!.vertex.destroy();
+                buffer!.group.destroy();
+                buffer!.normal.destroy();
+            }
+        }
+    }
+
+    export function create(vertexCount: number, groupCount: number, vertexTexture: Texture, groupTexture: Texture, normalTexture: Texture, boundingSphere: Sphere3D, textureMesh?: TextureMesh): TextureMesh {
+        const width = vertexTexture.getWidth();
+        const height = vertexTexture.getHeight();
         if (textureMesh) {
             textureMesh.vertexCount = vertexCount;
             textureMesh.groupCount = groupCount;
             ValueCell.update(textureMesh.geoTextureDim, Vec2.set(textureMesh.geoTextureDim.ref.value, width, height));
-            ValueCell.update(textureMesh.vertexGroupTexture, vertexGroupTexture);
+            ValueCell.update(textureMesh.vertexTexture, vertexTexture);
+            ValueCell.update(textureMesh.groupTexture, groupTexture);
             ValueCell.update(textureMesh.normalTexture, normalTexture);
+            textureMesh.doubleBuffer.set(vertexTexture, groupTexture, normalTexture);
             Sphere3D.copy(textureMesh.boundingSphere, boundingSphere);
             return textureMesh;
         } else {
@@ -59,8 +85,10 @@ export namespace TextureMesh {
                 vertexCount,
                 groupCount,
                 geoTextureDim: ValueCell.create(Vec2.create(width, height)),
-                vertexGroupTexture: ValueCell.create(vertexGroupTexture),
+                vertexTexture: ValueCell.create(vertexTexture),
+                groupTexture: ValueCell.create(groupTexture),
                 normalTexture: ValueCell.create(normalTexture),
+                doubleBuffer: new DoubleBuffer(),
                 boundingSphere: Sphere3D.clone(boundingSphere),
             };
         }
@@ -102,18 +130,17 @@ export namespace TextureMesh {
         const transparency = createEmptyTransparency();
         const clipping = createEmptyClipping();
 
-        const counts = { drawCount: textureMesh.vertexCount, vertexCount: textureMesh.vertexCount / 3, groupCount, instanceCount };
+        const counts = { drawCount: textureMesh.vertexCount, vertexCount: textureMesh.vertexCount, groupCount, instanceCount };
 
         const invariantBoundingSphere = Sphere3D.clone(textureMesh.boundingSphere);
         const boundingSphere = calculateTransformBoundingSphere(invariantBoundingSphere, transform.aTransform.ref.value, instanceCount);
 
         return {
             uGeoTexDim: textureMesh.geoTextureDim,
-            tPositionGroup: textureMesh.vertexGroupTexture,
+            tPosition: textureMesh.vertexTexture,
+            tGroup: textureMesh.groupTexture,
             tNormal: textureMesh.normalTexture,
 
-            // aGroup is used as a vertex index here and the group id is retirieved from tPositionGroup
-            aGroup: ValueCell.create(fillSerial(new Float32Array(textureMesh.vertexCount))),
             boundingSphere: ValueCell.create(boundingSphere),
             invariantBoundingSphere: ValueCell.create(invariantBoundingSphere),
             uInvariantBoundingSphere: ValueCell.create(Vec4.ofSphere(invariantBoundingSphere)),
@@ -148,11 +175,6 @@ export namespace TextureMesh {
         ValueCell.updateIfChanged(values.dFlipSided, props.flipSided);
         ValueCell.updateIfChanged(values.dIgnoreLight, props.ignoreLight);
         ValueCell.updateIfChanged(values.dXrayShaded, props.xrayShaded);
-
-        if (values.drawCount.ref.value > values.aGroup.ref.value.length) {
-            // console.log('updating vertex ids in aGroup to handle larger drawCount')
-            ValueCell.update(values.aGroup, fillSerial(new Float32Array(values.drawCount.ref.value)));
-        }
     }
 
     function updateBoundingSphere(values: TextureMeshValues, textureMesh: TextureMesh) {

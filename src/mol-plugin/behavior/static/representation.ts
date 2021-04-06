@@ -54,20 +54,20 @@ export function SyncStructureRepresentation3DState(ctx: PluginContext) {
     events.object.created.subscribe(e => {
         if (!SO.Molecule.Structure.Representation3DState.is(e.obj)) return;
         const data = e.obj.data as SO.Molecule.Structure.Representation3DStateData;
-        data.source.data.repr.setState(data.state);
-        ctx.canvas3d?.update(data.source.data.repr);
+        data.repr.setState(data.state);
+        ctx.canvas3d?.update(data.repr);
     });
     events.object.updated.subscribe(e => {
         if (!SO.Molecule.Structure.Representation3DState.is(e.obj)) return;
         const data = e.obj.data as SO.Molecule.Structure.Representation3DStateData;
-        data.source.data.repr.setState(data.state);
-        ctx.canvas3d?.update(data.source.data.repr);
+        data.repr.setState(data.state);
+        ctx.canvas3d?.update(data.repr);
     });
     events.object.removed.subscribe(e => {
         if (!SO.Molecule.Structure.Representation3DState.is(e.obj)) return;
         const data = e.obj.data as SO.Molecule.Structure.Representation3DStateData;
-        data.source.data.repr.setState(data.initialState);
-        ctx.canvas3d?.update(data.source.data.repr);
+        data.repr.setState(data.initialState);
+        ctx.canvas3d?.update(data.repr);
     });
 }
 
@@ -76,11 +76,18 @@ export function UpdateRepresentationVisibility(ctx: PluginContext) {
     ctx.state.data.events.cell.stateUpdated.subscribe(e => {
         const cell = e.state.cells.get(e.ref)!;
         if (!SO.isRepresentation3D(cell.obj)) return;
-        updateVisibility(cell, cell.obj.data.repr);
-        ctx.canvas3d?.syncVisibility();
+
+        if (updateVisibility(cell, cell.obj.data.repr)) {
+            ctx.canvas3d?.syncVisibility();
+        }
     });
 }
 
 function updateVisibility(cell: StateObjectCell, r: Representation<any>) {
-    r.setState({ visible: !cell.state.isHidden });
+    if (r.state.visible === cell.state.isHidden) {
+        r.setState({ visible: !cell.state.isHidden });
+        return true;
+    } else {
+        return false;
+    }
 }

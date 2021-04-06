@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2017-2020 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2017-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author David Sehnal <david.sehnal@gmail.com>
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
 
-import UUID from '../../../mol-util/uuid';
-import StructureSequence from './properties/sequence';
+import { UUID } from '../../../mol-util/uuid';
+import { StructureSequence } from './properties/sequence';
 import { AtomicHierarchy, AtomicConformation, AtomicRanges } from './properties/atomic';
 import { CoarseHierarchy, CoarseConformation } from './properties/coarse';
 import { Entities, ChemicalComponentMap, MissingResidues, StructAsymMap } from './properties/common';
@@ -28,7 +28,8 @@ import { Column } from '../../../mol-data/db';
 import { CustomModelProperty } from '../../../mol-model-props/common/custom-model-property';
 import { Trajectory, ArrayTrajectory } from '../trajectory';
 import { Unit } from '../structure';
-import SortedArray from '../../../mol-data/int/sorted-array';
+import { SortedArray } from '../../../mol-data/int/sorted-array';
+import { PolymerType } from './types';
 
 /**
  * Interface to the "source data" of the molecule.
@@ -118,6 +119,8 @@ export namespace Model {
                 const symmetry = ModelSymmetry.fromCell(f.cell.size, f.cell.anglesInRadians);
                 ModelSymmetry.Provider.set(m, symmetry);
             }
+
+            TrajectoryInfo.set(m, { index: i, size: frames.length });
 
             trajectory.push(m);
         }
@@ -221,6 +224,39 @@ export namespace Model {
             return model._staticPropertyData[CoordinatesHistoryProp] = coordinatesHistory;
         }
     };
+
+    const CoarseGrainedProp = '__CoarseGrained__';
+    /**
+     * Has typical coarse grained atom names (BB, SC1) or less than three times as many
+     * atoms as polymer residues (C-alpha only models).
+     */
+    export function isCoarseGrained(model: Model): boolean {
+        if (model._staticPropertyData[CoarseGrainedProp] !== undefined) return model._staticPropertyData[CoarseGrainedProp];
+
+        let polymerResidueCount = 0;
+        const { polymerType } = model.atomicHierarchy.derived.residue;
+        for (let i = 0; i < polymerType.length; ++i) {
+            if (polymerType[i] !== PolymerType.NA) polymerResidueCount += 1;
+        }
+
+        // check for coarse grained atom names
+        let hasBB = false, hasSC1 = false;
+        const { label_atom_id, _rowCount: atomCount } = model.atomicHierarchy.atoms;
+        for (let i = 0; i < atomCount; ++i) {
+            const atomName = label_atom_id.value(i);
+            if (!hasBB && atomName === 'BB') hasBB = true;
+            if (!hasSC1 && atomName === 'SC1') hasSC1 = true;
+            if (hasBB && hasSC1) break;
+        }
+
+        const coarseGrained = (hasBB && hasSC1) || (
+            polymerResidueCount && atomCount
+                ? atomCount / polymerResidueCount < 3
+                : false
+        );
+        model._staticPropertyData[CoarseGrainedProp] = coarseGrained;
+        return coarseGrained;
+    }
 
     //
 

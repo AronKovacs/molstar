@@ -1,4 +1,4 @@
-export default `<!DOCTYPE html>
+export const indexTemplate = `<!DOCTYPE html>
 <html lang="en">
     <head>
         <meta charset="UTF-8">
@@ -53,6 +53,7 @@ export default `<!DOCTYPE html>
                         SwaggerUIBundle.presets.apis,
                         SwaggerUIStandalonePreset
                     ],
+                    syntaxHighlight: { activated: false, theme: 'agate' },
                     plugins: [
                         SwaggerUIBundle.plugins.DownloadUrl,
                         HidePlugin

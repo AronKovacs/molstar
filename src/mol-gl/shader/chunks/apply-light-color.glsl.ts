@@ -7,7 +7,7 @@
  * which under the MIT License, Copyright © 2010-2019 three.js authors
  */
 
-export default `
+export const apply_light_color = `
 // inputs
 // - vec4 material
 // - vec3 vViewPosition
@@ -49,6 +49,6 @@ vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffu
 gl_FragColor = vec4(outgoingLight, color.a);
 
 #ifdef dXrayShaded
-    gl_FragColor.a *= 1.0 - max(0.001, abs(dot(normal, vec3(0, 0, 1))));
+    gl_FragColor.a *= 1.0 - pow(abs(dot(normal, vec3(0, 0, 1))), uXrayEdgeFalloff);
 #endif
 `;

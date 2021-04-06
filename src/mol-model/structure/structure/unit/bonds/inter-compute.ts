@@ -6,13 +6,13 @@
  */
 
 import { BondType, MoleculeType } from '../../../model/types';
-import Structure from '../../structure';
-import Unit from '../../unit';
+import { Structure } from '../../structure';
+import { Unit } from '../../unit';
 import { getElementIdx, getElementPairThreshold, getElementThreshold, isHydrogen, BondComputationProps, MetalsSet, DefaultBondComputationProps } from './common';
 import { InterUnitBonds, InterUnitEdgeProps } from './data';
 import { SortedArray } from '../../../../../mol-data/int';
 import { Vec3, Mat4 } from '../../../../../mol-math/linear-algebra';
-import StructureElement from '../../element';
+import { StructureElement } from '../../element';
 import { ElementIndex } from '../../../model/indexing';
 import { getInterBondOrderFromTable } from '../../../model/properties/atomic/bonds';
 import { IndexPairBonds } from '../../../../../mol-model-formats/structure/property/bonds/index-pair';
@@ -153,7 +153,7 @@ function findPairBonds(unitA: Unit.Atomic, unitB: Unit.Atomic, props: BondComput
                 ? thresholdAB
                 : beI < 0
                     ? thresholdA
-                    : (thresholdA + getElementThreshold(beI)) / 2; // not sure if avg or min but max is too big
+                    : (thresholdA + getElementThreshold(beI)) / 1.95; // not sure if avg or min but max is too big
 
             if (dist <= pairingThreshold) {
                 const atomIdB = label_atom_idB.value(bI);
@@ -176,7 +176,7 @@ export interface InterBondComputationProps extends BondComputationProps {
 function findBonds(structure: Structure, props: InterBondComputationProps) {
     const builder = new InterUnitGraph.Builder<number, StructureElement.UnitIndex, InterUnitEdgeProps>();
 
-    if (props.noCompute) {
+    if (props.noCompute || structure.isCoarseGrained) {
         // TODO add function that only adds bonds defined in structConn and avoids using
         //      structure.lookup and unit.lookup (expensive for large structure and not
         //      needed for archival files or files with an MD topology)

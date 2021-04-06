@@ -7,7 +7,6 @@
 
 import * as React from 'react';
 import { Mat4, Vec2, Vec3 } from '../../mol-math/linear-algebra';
-import { PluginContext } from '../../mol-plugin/context';
 import { Color } from '../../mol-util/color';
 import { ColorListName, ColorListOptions, ColorListOptionsScale, ColorListOptionsSet, getColorListFromName } from '../../mol-util/color/lists';
 import { Legend as LegendData } from '../../mol-util/legend';
@@ -22,10 +21,11 @@ import { ColorOptions, ColorValueOption, CombinedColorControl } from './color';
 import { Button, ControlGroup, ControlRow, ExpandGroup, IconButton, TextInput, ToggleButton } from './common';
 import { Icon, HelpOutlineSvg, CheckSvg, ClearSvg, BookmarksOutlinedSvg, MoreHorizSvg, ArrowDropDownSvg, ArrowRightSvg, ArrowDownwardSvg, ArrowUpwardSvg, DeleteOutlinedSvg } from './icons';
 import { legendFor } from './legend';
-import LineGraphComponent from './line-graph/line-graph-component';
+import { LineGraphComponent } from './line-graph/line-graph-component';
 import { Slider, Slider2 } from './slider';
 import { Asset } from '../../mol-util/assets';
 import { ColorListEntry } from '../../mol-util/color/color';
+import { PluginUIContext } from '../context';
 
 export type ParameterControlsCategoryFilter = string | null | (string | null)[]
 
@@ -104,7 +104,7 @@ export class ParameterControls<P extends PD.Params> extends React.PureComponent<
     }
 }
 
-export class ParameterMappingControl<S, T> extends PluginUIComponent<{ mapping: ParamMapping<S, T, PluginContext> }> {
+export class ParameterMappingControl<S, T> extends PluginUIComponent<{ mapping: ParamMapping<S, T, PluginUIContext> }> {
     setSettings = (p: { param: PD.Base<any>, name: string, value: any }, old: any) => {
         const values = { ...old, [p.name]: p.value };
         const t = this.props.mapping.update(values, this.plugin);
@@ -240,8 +240,8 @@ function renderSimple(options: { props: ParamProps<any>, state: { showHelp: bool
     const help = props.param.help
         ? props.param.help(props.value)
         : { description: props.param.description, legend: props.param.legend };
-    const desc = props.param.description;
     const hasHelp = help.description || help.legend;
+    const desc = label + (hasHelp ? '. Click for help.' : '');
     return <>
         <ControlRow
             className={className}

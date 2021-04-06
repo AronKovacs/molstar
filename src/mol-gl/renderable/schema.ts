@@ -37,6 +37,7 @@ export function splitValues(schema: RenderableSchema, values: RenderableValues) 
     const textureValues: TextureValues = {};
     const uniformValues: UniformValues = {};
     const materialUniformValues: UniformValues = {};
+    const bufferedUniformValues: UniformValues = {};
     Object.keys(schema).forEach(k => {
         const spec = schema[k];
         if (spec.type === 'attribute') attributeValues[k] = values[k];
@@ -45,11 +46,12 @@ export function splitValues(schema: RenderableSchema, values: RenderableValues) 
         if (spec.type === 'texture' && values[k] !== undefined) textureValues[k] = values[k];
         // check if k exists in values to exclude global uniforms
         if (spec.type === 'uniform' && values[k] !== undefined) {
-            if (spec.isMaterial) materialUniformValues[k] = values[k];
+            if (spec.variant === 'material') materialUniformValues[k] = values[k];
+            else if (spec.variant === 'buffered') bufferedUniformValues[k] = values[k];
             else uniformValues[k] = values[k];
         }
     });
-    return { attributeValues, defineValues, textureValues, uniformValues, materialUniformValues };
+    return { attributeValues, defineValues, textureValues, uniformValues, materialUniformValues, bufferedUniformValues };
 }
 
 export type Versions<T extends RenderableValues> = { [k in keyof T]: number }
@@ -68,9 +70,9 @@ export function AttributeSpec<K extends AttributeKind>(kind: K, itemSize: Attrib
     return { type: 'attribute', kind, itemSize, divisor };
 }
 
-export type UniformSpec<K extends UniformKind> = { type: 'uniform', kind: K, isMaterial: boolean }
-export function UniformSpec<K extends UniformKind>(kind: K, isMaterial = false): UniformSpec<K> {
-    return { type: 'uniform', kind, isMaterial };
+export type UniformSpec<K extends UniformKind> = { type: 'uniform', kind: K, variant?: 'material' | 'buffered' }
+export function UniformSpec<K extends UniformKind>(kind: K, variant?: 'material' | 'buffered'): UniformSpec<K> {
+    return { type: 'uniform', kind, variant };
 }
 
 export type TextureSpec<K extends TextureKind> = { type: 'texture', kind: K, format: TextureFormat, dataType: TextureType, filter: TextureFilter }
@@ -161,6 +163,8 @@ export const GlobalUniformSchema = {
 
     uHullExpansionSize: UniformSpec('f'),
     uCutaway: UniformSpec('b'),
+    uXrayEdgeFalloff: UniformSpec('f'),
+
     uRenderWboit: UniformSpec('b'),
 } as const;
 export type GlobalUniformSchema = typeof GlobalUniformSchema
@@ -182,7 +186,7 @@ export type InternalValues = Values<InternalSchema>
 
 export const ColorSchema = {
     // aColor: AttributeSpec('float32', 3, 0), // TODO
-    uColor: UniformSpec('v3', true),
+    uColor: UniformSpec('v3', 'material'),
     uColorTexDim: UniformSpec('v2'),
     tColor: TextureSpec('image-uint8', 'rgb', 'ubyte', 'nearest'),
     dColorType: DefineSpec('string', ['uniform', 'attribute', 'instance', 'group', 'groupInstance', 'vertex', 'vertexInstance']),
@@ -192,7 +196,7 @@ export type ColorValues = Values<ColorSchema>
 
 export const SizeSchema = {
     // aSize: AttributeSpec('float32', 1, 0), // TODO
-    uSize: UniformSpec('f', true),
+    uSize: UniformSpec('f', 'material'),
     uSizeTexDim: UniformSpec('v2'),
     tSize: TextureSpec('image-uint8', 'rgb', 'ubyte', 'nearest'),
     dSizeType: DefineSpec('string', ['uniform', 'attribute', 'instance', 'group', 'groupInstance']),
@@ -244,7 +248,6 @@ export const BaseSchema = {
     ...ClippingSchema,
 
     aInstance: AttributeSpec('float32', 1, 1),
-    aGroup: AttributeSpec('float32', 1, 0),
     /**
      * final per-instance transform calculated for instance `i` as
      * `aTransform[i] = matrix * transform[i] * extraTransform[i]`
@@ -254,7 +257,7 @@ export const BaseSchema = {
     /**
      * final alpha, calculated as `values.alpha * state.alpha`
      */
-    uAlpha: UniformSpec('f', true),
+    uAlpha: UniformSpec('f', 'material'),
     uVertexCount: UniformSpec('i'),
     uInstanceCount: UniformSpec('i'),
     uGroupCount: UniformSpec('i'),

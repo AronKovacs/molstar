@@ -1,8 +1,8 @@
-export default `
+export const assign_position = `
 mat4 model = uModel * aTransform;
 mat4 modelView = uView * model;
 #ifdef dGeoTexture
-    vec3 position = readFromTexture(tPositionGroup, aGroup, uGeoTexDim).xyz;
+    vec3 position = readFromTexture(tPosition, VertexID, uGeoTexDim).xyz;
 #else
     vec3 position = aPosition;
 #endif

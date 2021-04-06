@@ -10,7 +10,7 @@ import { QueryContext, Structure, StructureQuery, StructureSelection, StructureP
 import { BondType, NucleicBackboneAtoms, ProteinBackboneAtoms, SecondaryStructureType, AminoAcidNamesL, RnaBaseNames, DnaBaseNames, WaterNames, ElementSymbol } from '../../mol-model/structure/model/types';
 import { PluginContext } from '../../mol-plugin/context';
 import { MolScriptBuilder as MS } from '../../mol-script/language/builder';
-import Expression from '../../mol-script/language/expression';
+import { Expression } from '../../mol-script/language/expression';
 import { compile } from '../../mol-script/runtime/query/compiler';
 import { StateBuilder } from '../../mol-state';
 import { RuntimeContext } from '../../mol-task';
@@ -425,6 +425,18 @@ const surroundings = StructureSelectionQuery('Surrounding Residues (5 \u212B) of
     referencesCurrent: true
 });
 
+const surroundingLigands = StructureSelectionQuery('Surrounding Ligands (5 \u212B) of Selection', MS.struct.modifier.union([
+    MS.struct.modifier.surroundingLigands({
+        0: MS.internal.generator.current(),
+        radius: 5,
+        'include-water': true
+    })
+]), {
+    description: 'Select ligand components within 5 \u212B of the current selection.',
+    category: StructureSelectionCategory.Manipulate,
+    referencesCurrent: true
+});
+
 const complement = StructureSelectionQuery('Inverse / Complement of Selection', MS.struct.modifier.union([
     MS.struct.modifier.exceptBy({
         0: MS.struct.generator.all(),
@@ -442,6 +454,16 @@ const covalentlyBonded = StructureSelectionQuery('Residues Covalently Bonded to 
     })
 ]), {
     description: 'Select residues covalently bonded to current selection.',
+    category: StructureSelectionCategory.Manipulate,
+    referencesCurrent: true
+});
+
+const covalentlyBondedComponent = StructureSelectionQuery('Covalently Bonded Component', MS.struct.modifier.union([
+    MS.struct.modifier.includeConnected({
+        0: MS.internal.generator.current(), 'fixed-point': true
+    })
+]), {
+    description: 'Select covalently bonded component based on current selection.',
     category: StructureSelectionCategory.Manipulate,
     referencesCurrent: true
 });
@@ -635,9 +657,11 @@ export const StructureSelectionQueries = {
     ring,
     aromaticRing,
     surroundings,
+    surroundingLigands,
     complement,
     covalentlyBonded,
     covalentlyOrMetallicBonded,
+    covalentlyBondedComponent,
     wholeResidues,
 };
 

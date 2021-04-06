@@ -5,12 +5,13 @@
  */
 
 import { Canvas3DProps } from '../../mol-canvas3d/canvas3d';
-import { createPlugin, DefaultPluginSpec } from '../../mol-plugin';
 import { BuiltInTrajectoryFormat } from '../../mol-plugin-state/formats/trajectory';
+import { createPlugin } from '../../mol-plugin-ui';
+import { PluginUIContext } from '../../mol-plugin-ui/context';
+import { DefaultPluginUISpec } from '../../mol-plugin-ui/spec';
 import { PluginCommands } from '../../mol-plugin/commands';
-import { PluginContext } from '../../mol-plugin/context';
-import './index.html';
 import { Asset } from '../../mol-util/assets';
+import './index.html';
 require('mol-plugin-ui/skin/light.scss');
 
 type LoadParams = { url: string, format?: BuiltInTrajectoryFormat, isBinary?: boolean, assemblyId?: string }
@@ -28,8 +29,7 @@ const Canvas3DPresets = {
             outline: { name: 'staticWidth', params: { width: 1, threshold: 0.33 } }
         },
         renderer: {
-            ambientIntensity: 1,
-            lightIntensity: 0,
+            style: { name: 'flat', params: {} }
         }
     },
     occlusion: <Preset> {
@@ -41,8 +41,7 @@ const Canvas3DPresets = {
             outline: { name: 'off', params: { } }
         },
         renderer: {
-            ambientIntensity: 0.4,
-            lightIntensity: 0.6,
+            style: { name: 'matte', params: {} }
         }
     },
     standard: <Preset> {
@@ -54,25 +53,31 @@ const Canvas3DPresets = {
             outline: { name: 'off', params: { } }
         },
         renderer: {
-            ambientIntensity: 0.4,
-            lightIntensity: 0.6,
+            style: { name: 'matte', params: {} }
         }
     }
 };
 
+
 type Canvas3DPreset = keyof typeof Canvas3DPresets
 
 class LightingDemo {
-    plugin: PluginContext;
+    plugin: PluginUIContext;
+
+    private radius = 5;
+    private bias = 1.1;
+    private preset: Canvas3DPreset = 'illustrative';
 
     init(target: string | HTMLElement) {
         this.plugin = createPlugin(typeof target === 'string' ? document.getElementById(target)! : target, {
-            ...DefaultPluginSpec,
+            ...DefaultPluginUISpec(),
             layout: {
                 initial: {
                     isExpanded: false,
                     showControls: false
                 },
+            },
+            components: {
                 controls: { left: 'none', right: 'none', top: 'none', bottom: 'none' }
             }
         });
@@ -82,6 +87,10 @@ class LightingDemo {
 
     setPreset(preset: Canvas3DPreset) {
         const props = Canvas3DPresets[preset];
+        if (props.postprocessing.occlusion?.name === 'on') {
+            props.postprocessing.occlusion.params.radius = this.radius;
+            props.postprocessing.occlusion.params.bias = this.bias;
+        }
         PluginCommands.Canvas3D.SetSettings(this.plugin, { settings: {
             ...props,
             multiSample: {
@@ -99,7 +108,7 @@ class LightingDemo {
         }});
     }
 
-    async load({ url, format = 'mmcif', isBinary = false, assemblyId = '' }: LoadParams) {
+    async load({ url, format = 'mmcif', isBinary = true, assemblyId = '' }: LoadParams, radius: number, bias: number) {
         await this.plugin.clear();
 
         const data = await this.plugin.builders.data.download({ url: Asset.Url(url), isBinary }, { state: { isGhost: true } });
@@ -111,7 +120,11 @@ class LightingDemo {
         if (polymer) await this.plugin.builders.structure.representation.addRepresentation(polymer, { type: 'spacefill', color: 'illustrative' });
 
         const ligand = await this.plugin.builders.structure.tryCreateComponentStatic(structure, 'ligand');
-        if (ligand) await this.plugin.builders.structure.representation.addRepresentation(ligand, { type: 'ball-and-stick' });
+        if (ligand) await this.plugin.builders.structure.representation.addRepresentation(ligand, { type: 'ball-and-stick', color: 'element-symbol', colorParams: { carbonColor: { name: 'element-symbol', params: {} } } });
+
+        this.radius = radius;
+        this.bias = bias;
+        this.setPreset(this.preset);
     }
 }
 

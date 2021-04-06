@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019-2020 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2019-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  * @author Áron Samuel Kovács <aron.kovacs@mail.muni.cz>
@@ -7,8 +7,8 @@
 
 import { WebGLContext } from '../../mol-gl/webgl/context';
 import { createNullRenderTarget, RenderTarget } from '../../mol-gl/webgl/render-target';
-import Renderer from '../../mol-gl/renderer';
-import Scene from '../../mol-gl/scene';
+import { Renderer } from '../../mol-gl/renderer';
+import { Scene } from '../../mol-gl/scene';
 import { Texture } from '../../mol-gl/webgl/texture';
 import { Camera, ICamera } from '../camera';
 import { QuadSchema, QuadValues } from '../../mol-gl/compute/util';
@@ -20,10 +20,10 @@ import { ValueCell } from '../../mol-util';
 import { Vec2 } from '../../mol-math/linear-algebra';
 import { Helper } from '../helper/helper';
 
-import quad_vert from '../../mol-gl/shader/quad.vert';
-import hi_z_frag from '../../mol-gl/shader/hi-z.frag';
-import hi_z_copy_frag from '../../mol-gl/shader/hi-z-copy.frag';
-import depthMerge_frag from '../../mol-gl/shader/depth-merge.frag';
+import { quad_vert } from '../../mol-gl/shader/quad.vert';
+import { hiZ_frag } from '../../mol-gl/shader/hi-z.frag';
+import { hiZCopy_frag } from '../../mol-gl/shader/hi-z-copy.frag';
+import { depthMerge_frag } from '../../mol-gl/shader/depth-merge.frag';
 import { copy_frag } from '../../mol-gl/shader/copy.frag';
 import { StereoCamera } from '../camera/stereo';
 import { WboitPass } from './wboit';
@@ -46,7 +46,7 @@ function getHiZRenderable(ctx: WebGLContext, depthTexture: Texture): HiZRenderab
     };
 
     const schema = { ...HiZSchema };
-    const shaderCode = ShaderCode('hi-z', quad_vert, hi_z_frag, { shaderTextureLod: 'required' });
+    const shaderCode = ShaderCode('hi-z', quad_vert, hiZ_frag, { shaderTextureLod: 'required' });
     const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
 
     return createComputeRenderable(renderItem, values);
@@ -102,7 +102,7 @@ const HiZCopySchema = {
     ...QuadSchema,
     tColor: TextureSpec('texture', 'rgba', 'ubyte', 'nearest'),
 };
-const  HiZCopyShaderCode = ShaderCode('hi-z-copy', quad_vert, hi_z_copy_frag);
+const  HiZCopyShaderCode = ShaderCode('hi-z-copy', quad_vert, hiZCopy_frag);
 type  HiZCopyRenderable = ComputeRenderable<Values<typeof HiZCopySchema>>
 
 function getHiZCopyRenderable(ctx: WebGLContext, texture: Texture): HiZCopyRenderable {
@@ -151,7 +151,7 @@ export class DrawPass {
     }
 
     constructor(private webgl: WebGLContext, width: number, height: number, enableWboit: boolean, private readonly cutaway: CutawayPass) {
-        const { extensions, resources } = webgl;
+        const { extensions, resources, isWebGL2 } = webgl;
 
         this.drawTarget = createNullRenderTarget(webgl.gl);
 
@@ -169,8 +169,8 @@ export class DrawPass {
         this.depthTargetPrimitives = this.packedDepth ? webgl.createRenderTarget(width, height) : null;
         this.depthTargetVolumes = this.packedDepth ? webgl.createRenderTarget(width, height) : null;
 
-        this.depthTexturePrimitives = this.depthTargetPrimitives ? this.depthTargetPrimitives.texture : resources.texture('image-depth', 'depth', 'ushort', 'nearest');
-        this.depthTextureVolumes = this.depthTargetVolumes ? this.depthTargetVolumes.texture : resources.texture('image-depth', 'depth', 'ushort', 'nearest');
+        this.depthTexturePrimitives = this.depthTargetPrimitives ? this.depthTargetPrimitives.texture : resources.texture('image-depth', 'depth', isWebGL2 ? 'float' : 'ushort', 'nearest');
+        this.depthTextureVolumes = this.depthTargetVolumes ? this.depthTargetVolumes.texture : resources.texture('image-depth', 'depth', isWebGL2 ? 'float' : 'ushort', 'nearest');
         if (!this.packedDepth) {
             this.depthTexturePrimitives.define(width, height);
             this.depthTextureVolumes.define(width, height);

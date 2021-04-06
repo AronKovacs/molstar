@@ -1,4 +1,4 @@
-export default `
+export const color_vert_params = `
 #if defined(dRenderVariant_color)
     #if defined(dColorType_uniform)
         uniform vec3 uColor;
@@ -9,14 +9,6 @@ export default `
         varying vec4 vColor;
         uniform vec2 uColorTexDim;
         uniform sampler2D tColor;
-    #endif
-
-    #if defined(dColorType_vertex) || defined(dColorType_vertexInstance)
-        #if __VERSION__ == 100
-            attribute float aVertex;
-        #else
-            #define aVertex float(gl_VertexID)
-        #endif
     #endif
 
     #ifdef dOverpaint

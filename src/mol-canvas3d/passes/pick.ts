@@ -5,8 +5,8 @@
  */
 
 import { PickingId } from '../../mol-geo/geometry/picking';
-import Renderer from '../../mol-gl/renderer';
-import Scene from '../../mol-gl/scene';
+import { Renderer } from '../../mol-gl/renderer';
+import { Scene } from '../../mol-gl/scene';
 import { WebGLContext } from '../../mol-gl/webgl/context';
 import { GraphicsRenderVariant } from '../../mol-gl/webgl/render-item';
 import { RenderTarget } from '../../mol-gl/webgl/render-target';
@@ -67,14 +67,20 @@ export class PickPass {
     private renderVariant(renderer: Renderer, camera: ICamera, scene: Scene, helper: Helper, variant: GraphicsRenderVariant) {
         const depth = this.drawPass.depthTexturePrimitives;
         renderer.clear(false);
+
+        renderer.update(camera);
         renderer.renderPick(scene.primitives, camera, variant, null, this.cutaway.target);
         renderer.renderPick(scene.volumes, camera, variant, depth, null);
         renderer.renderPick(helper.handle.scene, camera, variant, null, null);
+
+        if (helper.camera.isEnabled) {
+            helper.camera.update(camera);
+            renderer.update(helper.camera.camera);
+            renderer.renderPick(helper.camera.scene, helper.camera.camera, variant, null, null);
+        }
     }
 
     render(renderer: Renderer, camera: ICamera, scene: Scene, helper: Helper) {
-        renderer.update(camera);
-
         this.objectPickTarget.bind();
         this.renderVariant(renderer, camera, scene, helper, 'pickObject');
 

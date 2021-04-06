@@ -1,4 +1,4 @@
-export default `
+export const common_frag_params = `
 uniform int uObjectId;
 uniform int uInstanceCount;
 uniform int uGroupCount;
@@ -48,6 +48,8 @@ uniform float uInteriorDarkening;
 uniform bool uInteriorColorFlag;
 uniform vec3 uInteriorColor;
 bool interior;
+
+uniform float uXrayEdgeFalloff;
 
 uniform mat4 uProjection;
 `;

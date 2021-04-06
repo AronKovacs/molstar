@@ -5,7 +5,7 @@
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
 
-import Type from '../type';
+import { Type } from '../type';
 import * as Core from './core';
 import { Arguments, Argument } from '../symbol';
 import { symbol } from '../helpers';
@@ -155,10 +155,17 @@ const modifier = {
         'as-whole-residues': Argument(Type.Bool, { isOptional: true })
     }), Types.ElementSelectionQuery, 'For each atom set in the selection, include all surrouding atoms/residues that are within the specified radius.'),
 
+    surroundingLigands: symbol(Arguments.Dictionary({
+        0: Argument(Types.ElementSelectionQuery),
+        radius: Argument(Type.Num),
+        'include-water': Argument(Type.Bool, { isOptional: true, defaultValue: true })
+    }), Types.ElementSelectionQuery, 'Find all ligands components around the source query.'),
+
     includeConnected: symbol(Arguments.Dictionary({
         0: Argument(Types.ElementSelectionQuery),
         'bond-test': Argument(Type.Bool, { isOptional: true, defaultValue: 'true for covalent bonds' as any }),
         'layer-count': Argument(Type.Num, { isOptional: true, defaultValue: 1, description: 'Number of bonded layers to include.' }),
+        'fixed-point': Argument(Type.Bool, { isOptional: true, defaultValue: false, description: 'Continue adding layers as long as new connections exist.' }),
         'as-whole-residues': Argument(Type.Bool, { isOptional: true })
     }), Types.ElementSelectionQuery, 'Pick all atom sets that are connected to the target.'),
 
@@ -339,7 +346,7 @@ function bondProp(type: Type, description?: string) {
     return symbol(Arguments.None, type, description);
 }
 
-export default {
+export const structureQuery = {
     '@header': 'Structure Queries',
     type,
     slot,

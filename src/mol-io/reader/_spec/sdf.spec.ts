@@ -17,7 +17,7 @@ const SdfString = `
 M  CHG  3   1  -1   3  -1   5  -1
 M  END
 > <DATABASE_ID>
-DB14523
+0
 
 > <DATABASE_NAME>
 drugbank
@@ -112,7 +112,24 @@ Phosphate ion
 > <SYNONYMS>
 Orthophosphate; Phosphate
 
-$$$$`;
+$$$$
+
+Comp 2
+
+5  4  0  0  0  0            999 V2000
+  0.0000    0.8250    0.0000 O   0  5  0  0  0  0  0  0  0  0  0  0
+ -0.8250    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+  0.0000   -0.8250    0.0000 O   0  5  0  0  0  0  0  0  0  0  0  0
+  0.0000    0.0000    0.0000 P   0  0  0  0  0  0  0  0  0  0  0  0
+  0.8250    0.0000    0.0000 O   0  5  0  0  0  0  0  0  0  0  0  0
+4  1  1  0  0  0  0
+4  2  2  0  0  0  0
+4  3  1  0  0  0  0
+4  5  1  0  0  0  0
+M  CHG  3   1  -1   3  -1   5  -1
+M  END
+> <DATABASE_ID>
+1`;
 
 describe('sdf reader', () => {
     it('basic', async () => {
@@ -120,13 +137,19 @@ describe('sdf reader', () => {
         if (parsed.isError) {
             throw new Error(parsed.message);
         }
-        const compound = parsed.result.compounds[0];
-        const { molFile, dataItems } = compound;
+        const compound1 = parsed.result.compounds[0];
+        const compound2 = parsed.result.compounds[1];
+        const { molFile, dataItems } = compound1;
         const { atoms, bonds } = molFile;
+
+        expect(parsed.result.compounds.length).toBe(2);
 
         // number of structures
         expect(atoms.count).toBe(5);
         expect(bonds.count).toBe(4);
+
+        expect(compound2.molFile.atoms.count).toBe(5);
+        expect(compound2.molFile.bonds.count).toBe(4);
 
         expect(atoms.x.value(0)).toBeCloseTo(0, 0.001);
         expect(atoms.y.value(0)).toBeCloseTo(0.8250, 0.0001);
@@ -138,12 +161,15 @@ describe('sdf reader', () => {
         expect(bonds.order.value(3)).toBe(1);
 
         expect(dataItems.dataHeader.value(0)).toBe('DATABASE_ID');
-        expect(dataItems.data.value(0)).toBe('DB14523');
+        expect(dataItems.data.value(0)).toBe('0');
 
         expect(dataItems.dataHeader.value(1)).toBe('DATABASE_NAME');
         expect(dataItems.data.value(1)).toBe('drugbank');
 
         expect(dataItems.dataHeader.value(31)).toBe('SYNONYMS');
         expect(dataItems.data.value(31)).toBe('Orthophosphate; Phosphate');
+
+        expect(compound1.dataItems.data.value(0)).toBe('0');
+        expect(compound2.dataItems.data.value(0)).toBe('1');
     });
 });

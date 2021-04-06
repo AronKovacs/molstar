@@ -9,19 +9,22 @@ import { UniqueArray } from '../../../../mol-data/generic';
 import { OrderedSet, SortedArray, Interval } from '../../../../mol-data/int';
 import { Mat4, Vec3 } from '../../../../mol-math/linear-algebra';
 import { MolScriptBuilder as MS } from '../../../../mol-script/language/builder';
-import Structure from '../structure';
-import Unit from '../unit';
+import { Structure } from '../structure';
+import { Unit } from '../unit';
 import { sortArray, hashFnv32a, hash2 } from '../../../../mol-data/util';
-import Expression from '../../../../mol-script/language/expression';
+import { Expression } from '../../../../mol-script/language/expression';
 import { ElementIndex, Model } from '../../model';
 import { UnitIndex } from './element';
 import { Location } from './location';
 import { ChainIndex } from '../../model/indexing';
 import { PrincipalAxes } from '../../../../mol-math/linear-algebra/matrix/principal-axes';
 import { NumberArray } from '../../../../mol-util/type-helpers';
-import StructureProperties from '../properties';
+import { StructureProperties } from '../properties';
 import { BoundaryHelper } from '../../../../mol-math/geometry/boundary-helper';
 import { Boundary } from '../../../../mol-math/geometry/boundary';
+
+// avoiding namespace lookup improved performance in Chrome (Aug 2020)
+const osSize = OrderedSet.size;
 
 /** Represents multiple structure element index locations */
 export interface Loci {
@@ -71,7 +74,7 @@ export namespace Loci {
 
     export function size(loci: Loci) {
         let s = 0;
-        for (const u of loci.elements) s += OrderedSet.size(u.indices);
+        for (const u of loci.elements) s += osSize(u.indices);
         return s;
     }
 

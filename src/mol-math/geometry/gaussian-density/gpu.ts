@@ -18,8 +18,8 @@ import { decodeFloatRGB } from '../../../mol-util/float-packing';
 import { ShaderCode } from '../../../mol-gl/shader-code';
 import { createComputeRenderItem } from '../../../mol-gl/webgl/render-item';
 import { ValueSpec, AttributeSpec, UniformSpec, TextureSpec, DefineSpec, Values } from '../../../mol-gl/renderable/schema';
-import gaussian_density_vert from '../../../mol-gl/shader/gaussian-density.vert';
-import gaussian_density_frag from '../../../mol-gl/shader/gaussian-density.frag';
+import { gaussianDensity_vert } from '../../../mol-gl/shader/gaussian-density.vert';
+import { gaussianDensity_frag } from '../../../mol-gl/shader/gaussian-density.frag';
 import { Framebuffer } from '../../../mol-gl/webgl/framebuffer';
 
 export const GaussianDensitySchema = {
@@ -33,14 +33,14 @@ export const GaussianDensitySchema = {
     uCurrentSlice: UniformSpec('f'),
     uCurrentX: UniformSpec('f'),
     uCurrentY: UniformSpec('f'),
-    uBboxMin: UniformSpec('v3', true),
-    uBboxSize: UniformSpec('v3', true),
-    uGridDim: UniformSpec('v3', true),
-    uGridTexDim: UniformSpec('v3', true),
-    uGridTexScale: UniformSpec('v2', true),
-    uAlpha: UniformSpec('f', true),
-    uResolution: UniformSpec('f', true),
-    uRadiusFactorInv: UniformSpec('f', true),
+    uBboxMin: UniformSpec('v3', 'material'),
+    uBboxSize: UniformSpec('v3', 'material'),
+    uGridDim: UniformSpec('v3', 'material'),
+    uGridTexDim: UniformSpec('v3', 'material'),
+    uGridTexScale: UniformSpec('v2', 'material'),
+    uAlpha: UniformSpec('f', 'material'),
+    uResolution: UniformSpec('f', 'material'),
+    uRadiusFactorInv: UniformSpec('f', 'material'),
     tMinDistanceTex: TextureSpec('texture', 'rgba', 'float', 'nearest'),
 
     dGridTexType: DefineSpec('string', ['2d', '3d']),
@@ -50,7 +50,7 @@ type GaussianDensityValues = Values<typeof GaussianDensitySchema>
 type GaussianDensityRenderable = ComputeRenderable<GaussianDensityValues>
 const GaussianDensityName = 'gaussian-density';
 const GaussianDensityShaderCode = ShaderCode(
-    GaussianDensityName, gaussian_density_vert, gaussian_density_frag
+    GaussianDensityName, gaussianDensity_vert, gaussianDensity_frag
 );
 
 function getFramebuffer(webgl: WebGLContext): Framebuffer {
@@ -120,7 +120,7 @@ type _GaussianDensityTextureData = {
 
 function calcGaussianDensityTexture2d(webgl: WebGLContext, position: PositionData, box: Box3D, radius: (index: number) => number, powerOfTwo: boolean, props: GaussianDensityProps, texture?: Texture): _GaussianDensityTextureData {
     // console.log('2d');
-    const { gl, resources, state, extensions: { colorBufferFloat, textureFloat, colorBufferHalfFloat, textureHalfFloat } } = webgl;
+    const { gl, resources, state, extensions: { colorBufferFloat, textureFloat, colorBufferHalfFloat, textureHalfFloat, blendMinMax } } = webgl;
     const { smoothness, resolution } = props;
 
     const { drawCount, positions, radii, groups, scale, expandedBox, dim, maxRadius } = prepareGaussianDensityData(position, box, radius, props);
@@ -190,11 +190,13 @@ function calcGaussianDensityTexture2d(webgl: WebGLContext, position: PositionDat
     setupDensityRendering(webgl, renderable);
     render(texture, true);
 
-    setupMinDistanceRendering(webgl, renderable);
-    render(minDistTex, true);
+    if (blendMinMax) {
+        setupMinDistanceRendering(webgl, renderable);
+        render(minDistTex, true);
 
-    setupGroupIdRendering(webgl, renderable);
-    render(texture, false);
+        setupGroupIdRendering(webgl, renderable);
+        render(texture, false);
+    }
 
     // printTexture(webgl, minDistTex, 0.75);
 

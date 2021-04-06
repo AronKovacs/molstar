@@ -18,19 +18,19 @@ import { ParamDefinition as PD } from '../../mol-util/param-definition';
 import { RenderTarget } from '../../mol-gl/webgl/render-target';
 import { DrawPass } from './draw';
 import { ICamera } from '../../mol-canvas3d/camera';
-import quad_vert from '../../mol-gl/shader/quad.vert';
-import outlines_frag from '../../mol-gl/shader/outlines.frag';
-import outlines_static_frag from  '../../mol-gl/shader/outlines-static.frag';
-import outlines_jfa_step_frag from '../../mol-gl/shader/outlines-jfa-step.frag';
-import ssao_frag from '../../mol-gl/shader/ssao.frag';
-import ssao_blur_frag from '../../mol-gl/shader/ssao-blur.frag';
-import postprocessing_depth_merge_frag from '../../mol-gl/shader/postprocessing-depth-merge.frag';
-import postprocessing_frag from '../../mol-gl/shader/postprocessing.frag';
+import { quad_vert } from '../../mol-gl/shader/quad.vert';
+import { outlines_frag } from '../../mol-gl/shader/outlines.frag';
+import { outlinesStatic_frag } from  '../../mol-gl/shader/outlines-static.frag';
+import { outlinesJfaStep_frag } from '../../mol-gl/shader/outlines-jfa-step.frag';
+import { ssao_frag } from '../../mol-gl/shader/ssao.frag';
+import { ssaoBlur_frag } from '../../mol-gl/shader/ssao-blur.frag';
+import { postprocessingDepthMerge_frag } from '../../mol-gl/shader/postprocessing-depth-merge.frag';
+import { postprocessing_frag } from '../../mol-gl/shader/postprocessing.frag';
 import { Framebuffer } from '../../mol-gl/webgl/framebuffer';
 import { Color } from '../../mol-util/color';
 import { FxaaParams, FxaaPass } from './fxaa';
 import { SmaaParams, SmaaPass } from './smaa';
-import Scene from '../../mol-gl/scene';
+import { Scene } from '../../mol-gl/scene';
 import { isDebugMode } from '../../mol-util/debug';
 
 const OutlinesSchema = {
@@ -103,7 +103,7 @@ function getOutlinesStaticRenderable(ctx: WebGLContext, outlinesTexture: Texture
     };
 
     const schema = { ...OutlinesStaticSchema };
-    const shaderCode = ShaderCode('outlines-static', quad_vert, outlines_static_frag);
+    const shaderCode = ShaderCode('outlines-static', quad_vert, outlinesStatic_frag);
     const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
 
     return createComputeRenderable(renderItem, values);
@@ -128,7 +128,7 @@ function getOutlinesJfaRenderable(ctx: WebGLContext, outlineTexture: Texture): O
     };
 
     const schema = { ...OutlinesJfaSchema };
-    const shaderCode = ShaderCode('outlines-jfa', quad_vert, outlines_jfa_step_frag);
+    const shaderCode = ShaderCode('outlines-jfa', quad_vert, outlinesJfaStep_frag);
     const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
 
     return createComputeRenderable(renderItem, values);
@@ -228,7 +228,7 @@ function getSsaoBlurRenderable(ctx: WebGLContext, ssaoDepthTexture: Texture, dir
     };
 
     const schema = { ...SsaoBlurSchema };
-    const shaderCode = ShaderCode('ssao_blur', quad_vert, ssao_blur_frag);
+    const shaderCode = ShaderCode('ssao_blur', quad_vert, ssaoBlur_frag);
     const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
 
     return createComputeRenderable(renderItem, values);
@@ -265,7 +265,7 @@ function getPostprocessingDepthMergeRenderable(ctx: WebGLContext, depthTexture: 
     };
 
     const schema = { ...PostprocessingDepthMergeSchema };
-    const shaderCode = ShaderCode('postprocessing-depth-merge', quad_vert, postprocessing_depth_merge_frag);
+    const shaderCode = ShaderCode('postprocessing-depth-merge', quad_vert, postprocessingDepthMerge_frag);
     const renderItem = createComputeRenderItem(ctx, 'triangles', shaderCode, schema, values);
 
     return createComputeRenderable(renderItem, values);
@@ -456,11 +456,11 @@ export class PostprocessingPass {
         this.ssaoBlurFirstPassFramebuffer = webgl.resources.framebuffer();
         this.ssaoBlurSecondPassFramebuffer = webgl.resources.framebuffer();
 
-        this.ssaoDepthTexture = webgl.resources.texture('image-uint8', 'rgba', 'ubyte', 'nearest');
+        this.ssaoDepthTexture = webgl.resources.texture('image-uint8', 'rgba', 'ubyte', 'linear');
         this.ssaoDepthTexture.define(width, height);
         this.ssaoDepthTexture.attachFramebuffer(this.ssaoFramebuffer, 'color0');
 
-        this.ssaoDepthBlurProxyTexture = webgl.resources.texture('image-uint8', 'rgba', 'ubyte', 'nearest');
+        this.ssaoDepthBlurProxyTexture = webgl.resources.texture('image-uint8', 'rgba', 'ubyte', 'linear');
         this.ssaoDepthBlurProxyTexture.define(width, height);
         this.ssaoDepthBlurProxyTexture.attachFramebuffer(this.ssaoBlurFirstPassFramebuffer, 'color0');
 

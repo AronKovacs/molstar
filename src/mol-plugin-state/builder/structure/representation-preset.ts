@@ -22,6 +22,8 @@ import { ChainIdColorThemeProvider } from '../../../mol-theme/color/chain-id';
 import { OperatorNameColorThemeProvider } from '../../../mol-theme/color/operator-name';
 import { IndexPairBonds } from '../../../mol-model-formats/structure/property/bonds/index-pair';
 import { StructConn } from '../../../mol-model-formats/structure/property/bonds/struct_conn';
+import { StructureRepresentationRegistry } from '../../../mol-repr/structure/registry';
+import { assertUnreachable } from '../../../mol-util/type-helpers';
 
 export interface StructureRepresentationPresetProvider<P = any, S extends _Result = _Result> extends PresetProvider<PluginStateObject.Molecule.Structure, P, S> { }
 export function StructureRepresentationPresetProvider<P, S extends _Result>(repr: StructureRepresentationPresetProvider<P, S>) { return repr; }
@@ -110,6 +112,8 @@ const auto = StructureRepresentationPresetProvider({
         const thresholds = plugin.config.get(PluginConfig.Structure.SizeThresholds) || Structure.DefaultSizeThresholds;
         const size = Structure.getSize(structure, thresholds);
 
+        const gapFraction = structure.polymerResidueCount / structure.polymerGapCount;
+
         switch (size) {
             case Structure.Size.Gigantic:
             case Structure.Size.Huge:
@@ -117,10 +121,14 @@ const auto = StructureRepresentationPresetProvider({
             case Structure.Size.Large:
                 return polymerCartoon.apply(ref, params, plugin);
             case Structure.Size.Medium:
-                return polymerAndLigand.apply(ref, params, plugin);
+                if (gapFraction > 3) {
+                    return polymerAndLigand.apply(ref, params, plugin);
+                } // else fall through
             case Structure.Size.Small:
-                // `showCarbohydrateSymbol: true` is nice e.g. for PDB 1aga
+                // `showCarbohydrateSymbol: true` is nice, e.g., for PDB 1aga
                 return atomicDetail.apply(ref, { ...params, showCarbohydrateSymbol: true }, plugin);
+            default:
+                assertUnreachable(size);
         }
     }
 });
@@ -209,7 +217,7 @@ const proteinAndNucleic = StructureRepresentationPresetProvider({
         };
         const gaussianProps = {
             radiusOffset: structure.isCoarseGrained ? 2 : 0,
-            smoothness: structure.isCoarseGrained ? 0.5 : 1.5,
+            smoothness: structure.isCoarseGrained ? 1.0 : 1.5,
         };
 
         const { update, builder, typeParams, symmetryColor } = reprBuilder(plugin, params, structure);
@@ -230,7 +238,7 @@ const coarseSurface = StructureRepresentationPresetProvider({
     id: 'preset-structure-representation-coarse-surface',
     display: {
         name: 'Coarse Surface', group: BuiltInPresetGroupName,
-        description: 'Shows polymers as coarse Gaussian Surface.'
+        description: 'Shows polymers and lipids as coarse Gaussian Surface.'
     },
     params: () => CommonParams,
     async apply(ref, params, plugin) {
@@ -238,7 +246,8 @@ const coarseSurface = StructureRepresentationPresetProvider({
         if (!structureCell) return {};
 
         const components = {
-            polymer: await presetStaticComponent(plugin, structureCell, 'polymer')
+            polymer: await presetStaticComponent(plugin, structureCell, 'polymer'),
+            lipid: await presetStaticComponent(plugin, structureCell, 'lipid'),
         };
 
         const structure = structureCell.obj!.data;
@@ -246,27 +255,28 @@ const coarseSurface = StructureRepresentationPresetProvider({
         const gaussianProps = Object.create(null);
         if (size === Structure.Size.Gigantic) {
             Object.assign(gaussianProps, {
-                traceOnly: true,
+                traceOnly: !structure.isCoarseGrained,
                 radiusOffset: 2,
-                smoothness: 0.5,
+                smoothness: 1,
                 visuals: ['structure-gaussian-surface-mesh']
             });
         } else if(size === Structure.Size.Huge) {
             Object.assign(gaussianProps, {
                 radiusOffset: structure.isCoarseGrained ? 2 : 0,
-                smoothness: 0.5,
+                smoothness: 1,
             });
         } else if(structure.isCoarseGrained) {
             Object.assign(gaussianProps, {
                 radiusOffset: 2,
-                smoothness: 0.5,
+                smoothness: 1,
             });
         }
 
         const { update, builder, typeParams, symmetryColor } = reprBuilder(plugin, params, structure);
 
         const representations = {
-            polymer: builder.buildRepresentation(update, components.polymer, { type: 'gaussian-surface', typeParams: { ...typeParams, ...gaussianProps }, color: symmetryColor }, { tag: 'polymer' })
+            polymer: builder.buildRepresentation(update, components.polymer, { type: 'gaussian-surface', typeParams: { ...typeParams, ...gaussianProps }, color: symmetryColor }, { tag: 'polymer' }),
+            lipid: builder.buildRepresentation(update, components.lipid, { type: 'gaussian-surface', typeParams: { ...typeParams, ...gaussianProps }, color: symmetryColor }, { tag: 'lipid' })
         };
 
         await update.commit({ revertOnError: true });
@@ -337,9 +347,15 @@ const atomicDetail = StructureRepresentationPresetProvider({
         const m = structure.models[0];
         const bondsGiven = !!IndexPairBonds.Provider.get(m) || StructConn.isExhaustive(m);
 
-        const atomicType = lowResidueElementRatio && !bondsGiven
-            ? 'spacefill' : highElementCount
-                ? 'line' : 'ball-and-stick';
+        let atomicType: StructureRepresentationRegistry.BuiltIn = 'ball-and-stick';
+        if (structure.isCoarseGrained) {
+            // TODO make configurable?
+            atomicType = structure.elementCount > 1_000_000 ? 'point' : 'spacefill';
+        } else if (lowResidueElementRatio && !bondsGiven) {
+            atomicType = 'spacefill';
+        } else if (highElementCount) {
+            atomicType = 'line';
+        }
         const showCarbohydrateSymbol = params.showCarbohydrateSymbol && !highElementCount && !lowResidueElementRatio;
 
         if (showCarbohydrateSymbol) {

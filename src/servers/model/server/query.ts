@@ -15,7 +15,7 @@ import { now } from '../../../mol-util/now';
 import { PerformanceMonitor } from '../../../mol-util/performance-monitor';
 import { ModelServerConfig as Config } from '../config';
 import { createModelPropertiesProviderFromConfig, ModelPropertiesProvider } from '../property-provider';
-import Version from '../version';
+import { VERSION } from '../version';
 import { Job, JobEntry } from './jobs';
 import { createStructureWrapperFromJobEntry, resolveStructures, StructureWrapper } from './structure-wrapper';
 import CifField = CifWriter.Field
@@ -57,7 +57,7 @@ export async function resolveJob(job: Job) {
 }
 
 const SharedParams = {
-    encoderName: `ModelServer ${Version}`
+    encoderName: `ModelServer ${VERSION}`
 };
 
 const SharedLigandWritingParams = {
@@ -248,6 +248,7 @@ async function resolveJobEntry(entry: JobEntry, structure: StructureWrapper, enc
 
         if (!entry.copyAllCategories && entry.queryDefinition.filter) encoder.setFilter(entry.queryDefinition.filter);
         if (result.length > 0) encode_mmCIF_categories(encoder, result, { copyAllCategories: entry.copyAllCategories });
+        else ConsoleLogger.logId(entry.job.id, 'Warning', `Empty result for Query ${entry.key}/${entry.queryDefinition.name}`);
         if (entry.transform && !Mat4.isIdentity(entry.transform)) GlobalModelTransformInfo.writeMmCif(encoder, entry.transform);
         if (!entry.copyAllCategories && entry.queryDefinition.filter) encoder.setFilter();
         perf.end('encode');
@@ -302,7 +303,7 @@ function int32<T>(name: string, value: (data: T) => number): CifField<number, T>
 const _model_server_result_fields: CifField<any, JobEntry>[] = [
     string<JobEntry>('job_id', ctx => '' + ctx.job.id),
     string<JobEntry>('datetime_utc', ctx => ctx.job.datetime_utc),
-    string<JobEntry>('server_version', ctx => Version),
+    string<JobEntry>('server_version', ctx => VERSION),
     string<JobEntry>('query_name', ctx => ctx.queryDefinition.name),
     string<JobEntry>('source_id', ctx => ctx.sourceId),
     string<JobEntry>('entry_id', ctx => ctx.entryId),

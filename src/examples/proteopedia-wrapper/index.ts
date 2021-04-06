@@ -6,14 +6,15 @@
 
 import * as ReactDOM from 'react-dom';
 import { Canvas3DProps, DefaultCanvas3DParams } from '../../mol-canvas3d/canvas3d';
-import { createPlugin, DefaultPluginSpec } from '../../mol-plugin';
 import { AnimateModelIndex } from '../../mol-plugin-state/animation/built-in/model-index';
 import { createStructureRepresentationParams } from '../../mol-plugin-state/helpers/structure-representation-params';
 import { PluginStateObject, PluginStateObject as PSO } from '../../mol-plugin-state/objects';
 import { StateTransforms } from '../../mol-plugin-state/transforms';
+import { createPlugin } from '../../mol-plugin-ui';
+import { PluginUIContext } from '../../mol-plugin-ui/context';
+import { DefaultPluginUISpec } from '../../mol-plugin-ui/spec';
 import { CreateVolumeStreamingInfo, InitVolumeStreaming } from '../../mol-plugin/behavior/dynamic/volume-streaming/transformers';
 import { PluginCommands } from '../../mol-plugin/commands';
-import { PluginContext } from '../../mol-plugin/context';
 import { PluginState } from '../../mol-plugin/state';
 import { MolScriptBuilder as MS } from '../../mol-script/language/builder';
 import { StateBuilder, StateObject, StateSelection } from '../../mol-state';
@@ -40,13 +41,13 @@ class MolStarProteopediaWrapper {
         modelInfo: this._ev<ModelInfo>()
     };
 
-    plugin: PluginContext;
+    plugin: PluginUIContext;
 
     init(target: string | HTMLElement, options?: {
         customColorList?: number[]
     }) {
         this.plugin = createPlugin(typeof target === 'string' ? document.getElementById(target)! : target, {
-            ...DefaultPluginSpec,
+            ...DefaultPluginUISpec(),
             animations: [
                 AnimateModelIndex
             ],
@@ -271,13 +272,17 @@ class MolStarProteopediaWrapper {
         resetPosition: () => PluginCommands.Camera.Reset(this.plugin, { })
     }
 
+    private animateModelIndexTargetFps() {
+        return Math.max(1, this.animate.modelIndex.targetFps | 0);
+    }
+
     animate = {
         modelIndex: {
-            maxFPS: 8,
-            onceForward: () => { this.plugin.managers.animation.play(AnimateModelIndex, { maxFPS: Math.max(0.5, this.animate.modelIndex.maxFPS | 0), mode: { name: 'once', params: { direction: 'forward' } } }); },
-            onceBackward: () => { this.plugin.managers.animation.play(AnimateModelIndex, { maxFPS: Math.max(0.5, this.animate.modelIndex.maxFPS | 0), mode: { name: 'once', params: { direction: 'backward' } } }); },
-            palindrome: () => { this.plugin.managers.animation.play(AnimateModelIndex, { maxFPS: Math.max(0.5, this.animate.modelIndex.maxFPS | 0), mode: { name: 'palindrome', params: {} } }); },
-            loop: () => { this.plugin.managers.animation.play(AnimateModelIndex, { maxFPS: Math.max(0.5, this.animate.modelIndex.maxFPS | 0), mode: { name: 'loop', params: {} } }); },
+            targetFps: 8,
+            onceForward: () => { this.plugin.managers.animation.play(AnimateModelIndex, { duration: { name: 'computed', params: { targetFps: this.animateModelIndexTargetFps() } }, mode: { name: 'once', params: { direction: 'forward' } } }); },
+            onceBackward: () => { this.plugin.managers.animation.play(AnimateModelIndex, { duration: { name: 'computed', params: { targetFps: this.animateModelIndexTargetFps() } }, mode: { name: 'once', params: { direction: 'backward' } } }); },
+            palindrome: () => { this.plugin.managers.animation.play(AnimateModelIndex, { duration: { name: 'computed', params: { targetFps: this.animateModelIndexTargetFps() } }, mode: { name: 'palindrome', params: {} } }); },
+            loop: () => { this.plugin.managers.animation.play(AnimateModelIndex, { duration: { name: 'computed', params: { targetFps: this.animateModelIndexTargetFps() } }, mode: { name: 'loop', params: { direction: 'forward' } } }); },
             stop: () => this.plugin.managers.animation.stop()
         }
     }

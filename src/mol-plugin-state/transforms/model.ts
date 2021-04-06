@@ -18,7 +18,7 @@ import { topologyFromPsf } from '../../mol-model-formats/structure/psf';
 import { Coordinates, Model, Queries, QueryContext, Structure, StructureElement, StructureQuery, StructureSelection as Sel, Topology, ArrayTrajectory, Trajectory } from '../../mol-model/structure';
 import { PluginContext } from '../../mol-plugin/context';
 import { MolScriptBuilder } from '../../mol-script/language/builder';
-import Expression from '../../mol-script/language/expression';
+import { Expression } from '../../mol-script/language/expression';
 import { Script } from '../../mol-script/script';
 import { StateObject, StateTransformer } from '../../mol-state';
 import { RuntimeContext, Task } from '../../mol-task';
@@ -37,6 +37,9 @@ import { parseMol2 } from '../../mol-io/reader/mol2/parser';
 import { trajectoryFromMol2 } from '../../mol-model-formats/structure/mol2';
 import { parseXtc } from '../../mol-io/reader/xtc/parser';
 import { coordinatesFromXtc } from '../../mol-model-formats/structure/xtc';
+import { parseXyz } from '../../mol-io/reader/xyz/parser';
+import { trajectoryFromXyz } from '../../mol-model-formats/structure/xyz';
+import { parseSdf } from '../../mol-io/reader/sdf/parser';
 
 export { CoordinatesFromDcd };
 export { CoordinatesFromXtc };
@@ -46,7 +49,9 @@ export { TrajectoryFromBlob };
 export { TrajectoryFromMmCif };
 export { TrajectoryFromPDB };
 export { TrajectoryFromGRO };
+export { TrajectoryFromXYZ };
 export { TrajectoryFromMOL };
+export { TrajectoryFromSDF };
 export { TrajectoryFromMOL2 };
 export { TrajectoryFromCube };
 export { TrajectoryFromCifCore };
@@ -253,6 +258,24 @@ const TrajectoryFromGRO = PluginStateTransform.BuiltIn({
     }
 });
 
+type TrajectoryFromXYZ = typeof TrajectoryFromXYZ
+const TrajectoryFromXYZ = PluginStateTransform.BuiltIn({
+    name: 'trajectory-from-xyz',
+    display: { name: 'Parse XYZ', description: 'Parse XYZ string and create trajectory.' },
+    from: [SO.Data.String],
+    to: SO.Molecule.Trajectory
+})({
+    apply({ a }) {
+        return Task.create('Parse XYZ', async ctx => {
+            const parsed = await parseXyz(a.data).runInContext(ctx);
+            if (parsed.isError) throw new Error(parsed.message);
+            const models = await trajectoryFromXyz(parsed.result).runInContext(ctx);
+            const props = trajectoryProps(models);
+            return new SO.Molecule.Trajectory(models, props);
+        });
+    }
+});
+
 type TrajectoryFromMOL = typeof TrajectoryFromMOL
 const TrajectoryFromMOL = PluginStateTransform.BuiltIn({
     name: 'trajectory-from-mol',
@@ -270,6 +293,36 @@ const TrajectoryFromMOL = PluginStateTransform.BuiltIn({
         });
     }
 });
+
+type TrajectoryFromSDF = typeof TrajectoryFromSDF
+const TrajectoryFromSDF = PluginStateTransform.BuiltIn({
+    name: 'trajectory-from-sdf',
+    display: { name: 'Parse SDF', description: 'Parse SDF string and create trajectory.' },
+    from: [SO.Data.String],
+    to: SO.Molecule.Trajectory
+})({
+    apply({ a }) {
+        return Task.create('Parse SDF', async ctx => {
+            const parsed = await parseSdf(a.data).runInContext(ctx);
+            if (parsed.isError) throw new Error(parsed.message);
+
+            const models: Model[] = [];
+
+            for (const { molFile } of parsed.result.compounds) {
+                const traj = await trajectoryFromMol(molFile).runInContext(ctx);
+                for (let i = 0; i < traj.frameCount; i++) {
+                    models.push(await Task.resolveInContext(traj.getFrameAtIndex(i), ctx));
+                }
+            }
+
+            const traj = new ArrayTrajectory(models);
+
+            const props = trajectoryProps(traj);
+            return new SO.Molecule.Trajectory(traj, props);
+        });
+    }
+});
+
 
 type TrajectoryFromMOL2 = typeof TrajectoryFromMOL
 const TrajectoryFromMOL2 = PluginStateTransform.BuiltIn({
@@ -345,9 +398,9 @@ const ModelFromTrajectory = PluginStateTransform.BuiltIn({
     to: SO.Molecule.Model,
     params: a => {
         if (!a) {
-            return { modelIndex: PD.Numeric(0, {}, { description: 'Zero-based index of the model' }) };
+            return { modelIndex: PD.Numeric(0, {}, { description: 'Zero-based index of the model', immediateUpdate: true }) };
         }
-        return { modelIndex: PD.Converted(plus1, minus1, PD.Numeric(1, { min: 1, max: a.data.frameCount, step: 1 }, { description: 'Model Index' })) };
+        return { modelIndex: PD.Converted(plus1, minus1, PD.Numeric(1, { min: 1, max: a.data.frameCount, step: 1 }, { description: 'Model Index', immediateUpdate: true })) };
     }
 })({
     isApplicable: a => a.data.frameCount > 0,
@@ -360,6 +413,10 @@ const ModelFromTrajectory = PluginStateTransform.BuiltIn({
             let description = a.data.frameCount === 1 ? undefined : `of ${a.data.frameCount}`;
             return new SO.Molecule.Model(model, { label, description });
         });
+    },
+    interpolate(a, b, t) {
+        const modelIndex = t >= 1 ? b.modelIndex : a.modelIndex + Math.floor((b.modelIndex - a.modelIndex + 1) * t);
+        return { modelIndex };
     },
     dispose({ b }) {
         b?.data.customProperties.dispose();
@@ -486,10 +543,10 @@ const StructureSelectionFromExpression = PluginStateTransform.BuiltIn({
     display: { name: 'Selection', description: 'Create a molecular structure from the specified expression.' },
     from: SO.Molecule.Structure,
     to: SO.Molecule.Structure,
-    params: {
+    params: () => ({
         expression: PD.Value<Expression>(MolScriptBuilder.struct.generator.all, { isHidden: true }),
         label: PD.Optional(PD.Text('', { isHidden: true }))
-    }
+    })
 })({
     apply({ a, params, cache }) {
         const { selection, entry } = StructureQueryHelper.createAndRun(a.data, params.expression);
@@ -526,7 +583,7 @@ const MultiStructureSelectionFromExpression = PluginStateTransform.BuiltIn({
     display: { name: 'Multi-structure Measurement Selection', description: 'Create selection object from multiple structures.' },
     from: SO.Root,
     to: SO.Molecule.Structure.Selections,
-    params: {
+    params: () => ({
         selections: PD.ObjectList({
             key: PD.Text(void 0, { description: 'A unique key.' }),
             ref: PD.Text(),
@@ -535,7 +592,7 @@ const MultiStructureSelectionFromExpression = PluginStateTransform.BuiltIn({
         }, e => e.ref, { isHidden: true }),
         isTransitive: PD.Optional(PD.Boolean(false, { isHidden: true, description: 'Remap the selections from the original structure if structurally equivalent.' })),
         label: PD.Optional(PD.Text('', { isHidden: true }))
-    }
+    })
 })({
     apply({ params, cache, dependencies }) {
         const entries = new Map<string, StructureQueryHelper.CacheEntry>();
@@ -651,10 +708,10 @@ const StructureSelectionFromScript = PluginStateTransform.BuiltIn({
     display: { name: 'Selection', description: 'Create a molecular structure from the specified script.' },
     from: SO.Molecule.Structure,
     to: SO.Molecule.Structure,
-    params: {
+    params: () => ({
         script: PD.Script({ language: 'mol-script', expression: '(sel.atom.atom-groups :residue-test (= atom.resname ALA))' }),
         label: PD.Optional(PD.Text(''))
-    }
+    })
 })({
     apply({ a, params, cache }) {
         const { selection, entry } = StructureQueryHelper.createAndRun(a.data, params.script);
@@ -690,10 +747,10 @@ const StructureSelectionFromBundle = PluginStateTransform.BuiltIn({
     display: { name: 'Selection', description: 'Create a molecular structure from the specified structure-element bundle.' },
     from: SO.Molecule.Structure,
     to: SO.Molecule.Structure,
-    params: {
+    params: () => ({
         bundle: PD.Value<StructureElement.Bundle>(StructureElement.Bundle.Empty, { isHidden: true }),
         label: PD.Optional(PD.Text('', { isHidden: true }))
-    }
+    })
 })({
     apply({ a, params, cache }) {
         if (params.bundle.hash !== a.data.hashCode) {

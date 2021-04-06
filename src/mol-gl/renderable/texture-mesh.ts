@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2019-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
@@ -13,11 +13,10 @@ import { ValueCell } from '../../mol-util';
 
 export const TextureMeshSchema = {
     ...BaseSchema,
-
-    uGeoTexDim: UniformSpec('v2'),
-    /** texture has vertex positions in XYZ and group id in W */
-    tPositionGroup: TextureSpec('texture', 'rgba', 'float', 'nearest'),
-    tNormal: TextureSpec('texture', 'rgba', 'float', 'nearest'),
+    uGeoTexDim: UniformSpec('v2', 'buffered'),
+    tPosition: TextureSpec('texture', 'rgb', 'float', 'nearest'),
+    tGroup: TextureSpec('texture', 'alpha', 'float', 'nearest'),
+    tNormal: TextureSpec('texture', 'rgb', 'float', 'nearest'),
 
     dFlatShaded: DefineSpec('boolean'),
     dDoubleSided: DefineSpec('boolean'),

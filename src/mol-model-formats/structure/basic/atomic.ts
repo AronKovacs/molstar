@@ -7,7 +7,7 @@
 
 import { Column, Table } from '../../../mol-data/db';
 import { Interval, Segmentation } from '../../../mol-data/int';
-import UUID from '../../../mol-util/uuid';
+import { UUID } from '../../../mol-util/uuid';
 import { ElementIndex, ChainIndex } from '../../../mol-model/structure';
 import { Model } from '../../../mol-model/structure/model/model';
 import { AtomicConformation, AtomicData, AtomicHierarchy, AtomicSegments, AtomsSchema, ChainsSchema, ResiduesSchema } from '../../../mol-model/structure/model/properties/atomic';
@@ -74,11 +74,11 @@ function createHierarchyData(atom_site: AtomSite, sourceIndex: Column<number>, o
         let cI = 0;
         let seqId = 0;
         for (let i = 0, il = seqIds.length; i < il; ++i) {
-            if (chainOffsets[cI] > residueOffsets[i]) {
+            if (residueOffsets[i] >= chainOffsets[cI + 1]) {
                 cI += 1;
                 seqId = 0;
             }
-            seqIds[i] = ++seqId;
+            seqIds[i] = ++seqId; // start id on one
         }
         residues.label_seq_id = Column.ofIntArray(seqIds);
     }

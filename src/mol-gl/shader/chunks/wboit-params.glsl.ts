@@ -1,4 +1,4 @@
-export default `
+export const wboit_params = `
 // FIXME
 #ifndef DrawingBufferSizeAlreadyDefined
     uniform vec2 uDrawingBufferSize;

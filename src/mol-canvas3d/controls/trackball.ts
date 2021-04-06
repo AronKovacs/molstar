@@ -10,7 +10,7 @@
 
 import { Quat, Vec2, Vec3, EPSILON } from '../../mol-math/linear-algebra';
 import { Viewport } from '../camera/util';
-import InputObserver, { DragInput, WheelInput, PinchInput, ButtonsType, ModifiersKeys } from '../../mol-util/input/input-observer';
+import { InputObserver, DragInput, WheelInput, PinchInput, ButtonsType, ModifiersKeys } from '../../mol-util/input/input-observer';
 import { ParamDefinition as PD } from '../../mol-util/param-definition';
 import { Camera } from '../camera';
 import { absMax } from '../../mol-math/misc';
@@ -36,8 +36,8 @@ export const DefaultTrackballBindings = {
 export const TrackballControlsParams = {
     noScroll: PD.Boolean(true, { isHidden: true }),
 
-    rotateSpeed: PD.Numeric(3.0, { min: 0.1, max: 10, step: 0.1 }),
-    zoomSpeed: PD.Numeric(6.0, { min: 0.1, max: 10, step: 0.1 }),
+    rotateSpeed: PD.Numeric(5.0, { min: 1, max: 10, step: 1 }),
+    zoomSpeed: PD.Numeric(7.0, { min: 1, max: 15, step: 1 }),
     panSpeed: PD.Numeric(1.0, { min: 0.1, max: 5, step: 0.1 }),
 
     spin: PD.Boolean(false, { description: 'Spin the 3D scene around the x-axis in view space' }),
@@ -49,7 +49,21 @@ export const TrackballControlsParams = {
     minDistance: PD.Numeric(0.01, {}, { isHidden: true }),
     maxDistance: PD.Numeric(1e150, {}, { isHidden: true }),
 
-    bindings: PD.Value(DefaultTrackballBindings, { isHidden: true })
+    bindings: PD.Value(DefaultTrackballBindings, { isHidden: true }),
+
+    /**
+     * minDistance = minDistanceFactor * boundingSphere.radius + minDistancePadding
+     * maxDistance = max(maxDistanceFactor * boundingSphere.radius, maxDistanceMin)
+     */
+    autoAdjustMinMaxDistance: PD.MappedStatic('on', {
+        off: PD.EmptyGroup(),
+        on: PD.Group({
+            minDistanceFactor: PD.Numeric(0),
+            minDistancePadding: PD.Numeric(5),
+            maxDistanceFactor: PD.Numeric(10),
+            maxDistanceMin: PD.Numeric(20)
+        })
+    }, { isHidden: true })
 };
 export type TrackballControlsProps = PD.Values<typeof TrackballControlsParams>
 
@@ -138,7 +152,8 @@ namespace TrackballControls {
             const dy = _rotCurr[1] - _rotPrev[1];
             Vec3.set(rotMoveDir, dx, dy, 0);
 
-            const angle = Vec3.magnitude(rotMoveDir) * p.rotateSpeed * input.pixelRatio;
+            const aspectRatio = input.width / input.height;
+            const angle = Vec3.magnitude(rotMoveDir) * p.rotateSpeed * input.pixelRatio * aspectRatio;
 
             if (angle) {
                 Vec3.sub(_eye, camera.position, camera.target);

@@ -5,7 +5,7 @@
  * @author David Sehnal <david.sehnal@gmail.com>
  */
 
-import BitFlags from '../../../mol-util/bit-flags';
+import { BitFlags } from '../../../mol-util/bit-flags';
 import { SaccharideCompIdMap } from '../structure/carbohydrates/constants';
 import { mmCIF_Schema } from '../../../mol-io/reader/cif/schema/mmcif';
 import { SetUtils } from '../../../mol-util/set';
@@ -245,7 +245,9 @@ export const WaterNames = new Set([
 export const AminoAcidNamesL = new Set([
     'HIS', 'ARG', 'LYS', 'ILE', 'PHE', 'LEU', 'TRP', 'ALA', 'MET', 'PRO', 'CYS',
     'ASN', 'VAL', 'GLY', 'SER', 'GLN', 'TYR', 'ASP', 'GLU', 'THR', 'SEC', 'PYL',
-    'UNK' // unknown amino acid from CCD
+    'UNK', // unknown amino acid from CCD
+    'MSE', 'SEP', 'TPO', 'PTR', 'PCA' // common
+
 ]);
 export const AminoAcidNamesD = new Set([
     'DAL', // D-ALANINE

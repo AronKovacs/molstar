@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2018-2020 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2018-2021 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
@@ -18,8 +18,7 @@ import { Sphere3D } from '../../../mol-math/geometry';
 
 export const ElementPointParams = {
     ...UnitsPointsParams,
-    // sizeFactor: PD.Numeric(1.0, { min: 0, max: 10, step: 0.01 }),
-    pointSizeAttenuation: PD.Boolean(false),
+    pointSizeAttenuation: PD.Boolean(true),
     ignoreHydrogens: PD.Boolean(false),
     traceOnly: PD.Boolean(false),
 };
@@ -30,17 +29,20 @@ export type ElementPointParams = typeof ElementPointParams
 export function createElementPoint(ctx: VisualContext, unit: Unit, structure: Structure, theme: Theme, props: PD.Values<ElementPointParams>, points: Points) {
     // TODO sizeFactor
 
+    const { child } = structure;
+    if (child && !child.unitMap.get(unit.id)) return Points.createEmpty(points);
+
     const elements = unit.elements;
     const n = elements.length;
     const builder = PointsBuilder.create(n, n / 10, points);
 
     const p = Vec3();
     const pos = unit.conformation.invariantPosition;
-    const ignore = makeElementIgnoreTest(unit, props);
+    const ignore = makeElementIgnoreTest(structure, unit, props);
 
     if (ignore) {
         for (let i = 0; i < n; ++i) {
-            if (ignore(unit, elements[i])) continue;
+            if (ignore(elements[i])) continue;
             pos(elements[i], p);
             builder.add(p[0], p[1], p[2], i);
         }

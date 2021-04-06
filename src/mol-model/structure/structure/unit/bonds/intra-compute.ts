@@ -7,18 +7,19 @@
 
 import { BondType } from '../../../model/types';
 import { IntraUnitBonds } from './data';
-import Unit from '../../unit';
+import { Unit } from '../../unit';
 import { IntAdjacencyGraph } from '../../../../../mol-math/graph';
 import { BondComputationProps, getElementIdx, MetalsSet, getElementThreshold, isHydrogen, getElementPairThreshold, DefaultBondComputationProps } from './common';
 import { SortedArray } from '../../../../../mol-data/int';
 import { getIntraBondOrderFromTable } from '../../../model/properties/atomic/bonds';
-import StructureElement from '../../element';
+import { StructureElement } from '../../element';
 import { IndexPairBonds } from '../../../../../mol-model-formats/structure/property/bonds/index-pair';
 import { ComponentBond } from '../../../../../mol-model-formats/structure/property/bonds/chem_comp';
 import { StructConn } from '../../../../../mol-model-formats/structure/property/bonds/struct_conn';
 import { Vec3 } from '../../../../../mol-math/linear-algebra';
 import { ElementIndex } from '../../../model/indexing';
 import { equalEps } from '../../../../../mol-math/linear-algebra/3d/common';
+import { Model } from '../../../model/model';
 
 function getGraph(atomA: StructureElement.UnitIndex[], atomB: StructureElement.UnitIndex[], _order: number[], _flags: number[], atomCount: number, canRemap: boolean): IntraUnitBonds {
     const builder = new IntAdjacencyGraph.EdgeBuilder(atomCount, atomA, atomB);
@@ -211,7 +212,7 @@ function findBonds(unit: Unit.Atomic, props: BondComputationProps): IntraUnitBon
                 ? thresholdAB
                 : beI < 0
                     ? thresholdA
-                    : (thresholdA + getElementThreshold(beI)) / 2; // not sure if avg or min but max is too big
+                    : (thresholdA + getElementThreshold(beI)) / 1.95; // not sure if avg or min but max is too big
 
             if (dist <= pairingThreshold) {
                 atomA[atomA.length] = _aI;
@@ -233,7 +234,7 @@ function findBonds(unit: Unit.Atomic, props: BondComputationProps): IntraUnitBon
 
 function computeIntraUnitBonds(unit: Unit.Atomic, props?: Partial<BondComputationProps>) {
     const p = { ...DefaultBondComputationProps, ...props };
-    if (p.noCompute) {
+    if (p.noCompute || Model.isCoarseGrained(unit.model)) {
         // TODO add function that only adds bonds defined in structConn of chemCompBond
         //      and avoid using unit.lookup
         return IntraUnitBonds.Empty;

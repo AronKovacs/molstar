@@ -58,7 +58,7 @@ interface UnitsVisualBuilder<P extends StructureParams, G extends Geometry> {
     getLoci(pickingId: PickingId, structureGroup: StructureGroup, id: number): Loci
     eachLocation(loci: Loci, structureGroup: StructureGroup, apply: (interval: Interval) => boolean, isMarking: boolean): boolean
     setUpdateState(state: VisualUpdateState, newProps: PD.Values<P>, currentProps: PD.Values<P>, newTheme: Theme, currentTheme: Theme, newStructureGroup: StructureGroup, currentStructureGroup: StructureGroup): void
-    mustRecreate?: (props: PD.Values<P>) => boolean
+    mustRecreate?: (structureGroup: StructureGroup, props: PD.Values<P>) => boolean
     dispose?: (geometry: G) => void
 }
 
@@ -294,7 +294,10 @@ export function UnitsVisual<G extends Geometry, P extends StructureParams & Geom
         },
         destroy() {
             dispose?.(geometry);
-            renderObject = undefined;
+            if (renderObject) {
+                renderObject.state.disposed = true;
+                renderObject = undefined;
+            }
         },
         mustRecreate
     };

@@ -5,9 +5,9 @@
  */
 
 import { Segmentation, SortedArray } from '../../../../mol-data/int';
-import StructureElement from '../../../../mol-model/structure/structure/element';
+import { StructureElement } from '../../../../mol-model/structure/structure/element';
 import { StructureProperties as P, Unit } from '../../structure';
-import Structure from '../../structure/structure';
+import { Structure } from '../../structure/structure';
 import { StructureQuery } from '../query';
 import { StructureSelection } from '../selection';
 import { QueryContext } from '../context';
@@ -43,7 +43,7 @@ export function atomicSequence(): StructureQuery {
 
             units.push(unit);
         }
-        return StructureSelection.Singletons(inputStructure, new Structure(units, { parent: inputStructure }));
+        return StructureSelection.Singletons(inputStructure, Structure.create(units, { parent: inputStructure }));
     };
 }
 
@@ -62,7 +62,7 @@ export function water(): StructureQuery {
             if (P.entity.type(l) !== 'water') continue;
             units.push(unit);
         }
-        return StructureSelection.Singletons(inputStructure, new Structure(units, { parent: inputStructure }));
+        return StructureSelection.Singletons(inputStructure, Structure.create(units, { parent: inputStructure }));
     };
 }
 
@@ -92,7 +92,7 @@ export function atomicHet(): StructureQuery {
 
             units.push(unit);
         }
-        return StructureSelection.Singletons(inputStructure, new Structure(units, { parent: inputStructure }));
+        return StructureSelection.Singletons(inputStructure, Structure.create(units, { parent: inputStructure }));
     };
 }
 
@@ -105,7 +105,7 @@ export function spheres(): StructureQuery {
             if (unit.kind !== Unit.Kind.Spheres) continue;
             units.push(unit);
         }
-        return StructureSelection.Singletons(inputStructure, new Structure(units, { parent: inputStructure }));
+        return StructureSelection.Singletons(inputStructure, Structure.create(units, { parent: inputStructure }));
     };
 }
 

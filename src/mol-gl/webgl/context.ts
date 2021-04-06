@@ -127,12 +127,14 @@ function waitForGpuCommandsCompleteSync(gl: GLRenderingContext): void {
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, tmpPixel);
 }
 
-export function readPixels(gl: GLRenderingContext, x: number, y: number, width: number, height: number, buffer: Uint8Array | Float32Array) {
+export function readPixels(gl: GLRenderingContext, x: number, y: number, width: number, height: number, buffer: Uint8Array | Float32Array | Int32Array) {
     if (isDebugMode) checkFramebufferStatus(gl);
     if (buffer instanceof Uint8Array) {
         gl.readPixels(x, y, width, height, gl.RGBA, gl.UNSIGNED_BYTE, buffer);
     } else if (buffer instanceof Float32Array) {
         gl.readPixels(x, y, width, height, gl.RGBA, gl.FLOAT, buffer);
+    } else if (buffer instanceof Int32Array && isWebGL2(gl)) {
+        gl.readPixels(x, y, width, height, gl.RGBA_INTEGER, gl.INT, buffer);
     } else {
         throw new Error('unsupported readPixels buffer type');
     }
@@ -186,6 +188,7 @@ export interface WebGLContext {
     readonly resources: WebGLResources
 
     readonly maxTextureSize: number
+    readonly max3dTextureSize: number
     readonly maxRenderbufferSize: number
     readonly maxDrawBuffers: number
     readonly maxTextureImageUnits: number
@@ -204,7 +207,7 @@ export interface WebGLContext {
 
     createRenderTarget: (width: number, height: number, depth?: boolean, type?: 'uint8' | 'float32' | 'fp16', filter?: TextureFilter) => RenderTarget
     unbindFramebuffer: () => void
-    readPixels: (x: number, y: number, width: number, height: number, buffer: Uint8Array | Float32Array) => void
+    readPixels: (x: number, y: number, width: number, height: number, buffer: Uint8Array | Float32Array | Int32Array) => void
     readPixelsAsync: (x: number, y: number, width: number, height: number, buffer: Uint8Array) => Promise<void>
     waitForGpuCommandsComplete: () => Promise<void>
     waitForGpuCommandsCompleteSync: () => void
@@ -221,8 +224,9 @@ export function createContext(gl: GLRenderingContext, props: Partial<{ pixelScal
 
     const parameters = {
         maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE) as number,
+        max3dTextureSize: isWebGL2(gl) ? gl.getParameter(gl.MAX_3D_TEXTURE_SIZE) as number : 0,
         maxRenderbufferSize: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number,
-        maxDrawBuffers: isWebGL2(gl) ? gl.getParameter(gl.MAX_DRAW_BUFFERS) as number : 0,
+        maxDrawBuffers: extensions.drawBuffers ? gl.getParameter(extensions.drawBuffers.MAX_DRAW_BUFFERS) as number : 0,
         maxTextureImageUnits: gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) as number,
         maxVertexTextureImageUnits: gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) as number,
     };
@@ -287,6 +291,7 @@ export function createContext(gl: GLRenderingContext, props: Partial<{ pixelScal
         resources,
 
         get maxTextureSize () { return parameters.maxTextureSize; },
+        get max3dTextureSize () { return parameters.max3dTextureSize; },
         get maxRenderbufferSize () { return parameters.maxRenderbufferSize; },
         get maxDrawBuffers () { return parameters.maxDrawBuffers; },
         get maxTextureImageUnits () { return parameters.maxTextureImageUnits; },
@@ -330,7 +335,7 @@ export function createContext(gl: GLRenderingContext, props: Partial<{ pixelScal
             };
         },
         unbindFramebuffer: () => unbindFramebuffer(gl),
-        readPixels: (x: number, y: number, width: number, height: number, buffer: Uint8Array | Float32Array) => {
+        readPixels: (x: number, y: number, width: number, height: number, buffer: Uint8Array | Float32Array | Int32Array) => {
             readPixels(gl, x, y, width, height, buffer);
         },
         readPixelsAsync,

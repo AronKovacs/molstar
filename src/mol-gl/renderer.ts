@@ -6,7 +6,7 @@
 
 import { Viewport } from '../mol-canvas3d/camera/util';
 import { ICamera } from '../mol-canvas3d/camera';
-import Scene from './scene';
+import { Scene } from './scene';
 import { WebGLContext } from './webgl/context';
 import { Mat4, Vec3, Vec4, Vec2, Quat } from '../mol-math/linear-algebra';
 import { GraphicsRenderable } from './renderable';
@@ -82,6 +82,8 @@ export const RendererParams = {
 
     highlightColor: PD.Color(Color.fromNormalizedRgb(1.0, 0.4, 0.6)),
     selectColor: PD.Color(Color.fromNormalizedRgb(0.2, 1.0, 0.1)),
+
+    xrayEdgeFalloff: PD.Numeric(1, { min: 0.0, max: 3.0, step: 0.1 }),
 
     style: PD.MappedStatic('matte', {
         custom: PD.Group({
@@ -270,13 +272,15 @@ namespace Renderer {
 
             uHighlightColor: ValueCell.create(Color.toVec3Normalized(Vec3(), p.highlightColor)),
             uSelectColor: ValueCell.create(Color.toVec3Normalized(Vec3(), p.selectColor)),
+
+            uXrayEdgeFalloff: ValueCell.create(p.xrayEdgeFalloff),
         };
         const globalUniformList = Object.entries(globalUniforms);
 
         let globalUniformsNeedUpdate = true;
 
         const renderObject = (r: GraphicsRenderable, variant: GraphicsRenderVariant) => {
-            if (!r.state.visible || (!r.state.pickable && variant[0] === 'p')) {
+            if (r.state.disposed || !r.state.visible || (!r.state.pickable && variant[0] === 'p')) {
                 return;
             }
 
@@ -624,6 +628,11 @@ namespace Renderer {
                     ValueCell.update(globalUniforms.uSelectColor, Color.toVec3Normalized(globalUniforms.uSelectColor.ref.value, p.selectColor));
                 }
 
+                if (props.xrayEdgeFalloff !== undefined && props.xrayEdgeFalloff !== p.xrayEdgeFalloff) {
+                    p.xrayEdgeFalloff = props.xrayEdgeFalloff;
+                    ValueCell.update(globalUniforms.uXrayEdgeFalloff, p.xrayEdgeFalloff);
+                }
+
                 if (props.style !== undefined) {
                     p.style = props.style;
                     Object.assign(style, getStyle(props.style));
@@ -686,4 +695,4 @@ namespace Renderer {
     }
 }
 
-export default Renderer;
+export { Renderer };

@@ -5,13 +5,13 @@
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
 
-import Structure from '../structure';
+import { Structure } from '../structure';
 import { Lookup3D, GridLookup3D, Result } from '../../../../mol-math/geometry';
 import { Vec3 } from '../../../../mol-math/linear-algebra';
 import { OrderedSet } from '../../../../mol-data/int';
 import { StructureUniqueSubsetBuilder } from './unique-subset-builder';
-import StructureElement from '../element';
-import Unit from '../unit';
+import { StructureElement } from '../element';
+import { Unit } from '../unit';
 
 export interface StructureResult extends Result<StructureElement.UnitIndex> {
     units: Unit[]
@@ -89,6 +89,36 @@ export class StructureLookup3D {
             builder.beginUnit(unit.id);
             for (let j = 0, _j = groupResult.count; j < _j; j++) {
                 builder.addElement(elements[groupResult.indices[j]]);
+            }
+            builder.commitUnit();
+        }
+    }
+
+    findIntoBuilderIf(x: number, y: number, z: number, radius: number, builder: StructureUniqueSubsetBuilder, test: (l: StructureElement.Location) => boolean) {
+        const { units } = this.structure;
+        const closeUnits = this.unitLookup.find(x, y, z, radius);
+        if (closeUnits.count === 0) return;
+
+        const loc = StructureElement.Location.create(this.structure);
+
+        for (let t = 0, _t = closeUnits.count; t < _t; t++) {
+            const unit = units[closeUnits.indices[t]];
+            Vec3.set(this.pivot, x, y, z);
+            if (!unit.conformation.operator.isIdentity) {
+                Vec3.transformMat4(this.pivot, this.pivot, unit.conformation.operator.inverse);
+            }
+            const unitLookup = unit.lookup3d;
+            const groupResult = unitLookup.find(this.pivot[0], this.pivot[1], this.pivot[2], radius);
+            if (groupResult.count === 0) continue;
+
+            const elements = unit.elements;
+            loc.unit = unit;
+            builder.beginUnit(unit.id);
+            for (let j = 0, _j = groupResult.count; j < _j; j++) {
+                loc.element = elements[groupResult.indices[j]];
+                if (test(loc)) {
+                    builder.addElement(loc.element);
+                }
             }
             builder.commitUnit();
         }

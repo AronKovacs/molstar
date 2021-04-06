@@ -5,8 +5,8 @@
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  */
 
-import StructureElement from './element';
-import Unit from './unit';
+import { StructureElement } from './element';
+import { Unit } from './unit';
 import { VdwRadius } from '../model/properties/atomic';
 import { SecondaryStructureType } from '../model/types';
 import { SecondaryStructureProvider } from '../../../mol-model-props/computed/secondary-structure';
@@ -98,12 +98,12 @@ const residue = {
     microheterogeneityCompIds: p(microheterogeneityCompIds),
     secondary_structure_type: p(l => {
         if (!Unit.isAtomic(l.unit)) notAtomic();
-        const secStruc = SecondaryStructureProvider.get(l.structure).value?.get(l.unit.id);
+        const secStruc = SecondaryStructureProvider.get(l.structure).value?.get(l.unit.invariantId);
         return secStruc?.type[l.unit.residueIndex[l.element]] ?? SecondaryStructureType.Flag.NA;
     }),
     secondary_structure_key: p(l => {
         if (!Unit.isAtomic(l.unit)) notAtomic();
-        const secStruc = SecondaryStructureProvider.get(l.structure).value?.get(l.unit.id);
+        const secStruc = SecondaryStructureProvider.get(l.structure).value?.get(l.unit.invariantId);
         return secStruc?.key[l.unit.residueIndex[l.element]] ?? -1;
     }),
     chem_comp_type: p(l => !Unit.isAtomic(l.unit) ? notAtomic() : l.unit.model.properties.chemicalComponentMap.get(compId(l))!.type),
@@ -195,4 +195,4 @@ const StructureProperties = {
 };
 
 type StructureProperties = typeof StructureProperties
-export default StructureProperties;
+export { StructureProperties };
