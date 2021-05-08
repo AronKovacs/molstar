@@ -28,9 +28,7 @@ void main(void) {
     if (jfaValue.x < 0.0) {
         result = packDepthToRGBA(1.0);
     } else {
-        float viewZ = uNear + (jfaValue.w * (uFar - uNear));
-        float depth = viewZToDepth(uIsOrtho, viewZ, uNear, uFar);
-        result = packDepthToRGBA(clamp(depth, 0.0, 1.0));
+        result = packDepthToRGBA(clamp(jfaValue.w, 0.0, 1.0));
     }
 
     gl_FragColor = result;

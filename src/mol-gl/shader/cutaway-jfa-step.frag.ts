@@ -11,11 +11,13 @@ precision highp sampler2D;
 
 // x: seed x coord, <0, 1>
 // y: seed y coord, <0, 1>
-// z: seed linear z coord, <0, 1>
-// w: self linear z coord, <0, 1>
+// z: seed z coord, <0, 1>
+// w: self z coord, <0, 1>
 // if x (or y or z or w) is less than 0 then that pixel is 'empty'
 uniform sampler2D tCutaway;
 uniform vec2 uTexSize;
+
+uniform mat4 uInvProjection;
 
 // needed for stereo camera
 // x, y, width, height, all <0, 1>
@@ -26,9 +28,11 @@ uniform vec2 uStep;
 uniform float uPMsz;
 uniform float uAngle;
 uniform float uEdgeRegionSize;
+uniform float uSlopeStartOffset;
 
 uniform vec2 uAspectRatio;
 
+uniform float uIsOrtho;
 uniform float uNear;
 uniform float uFar;
 
@@ -50,13 +54,22 @@ float angleEdgeCompression(vec2 coords) {
     return uAngle * terms.x * terms.y;
 }
 
+float getPixelViewSize(vec3 coords, vec2 invTexSize) {
+    float viewX1 = screenSpaceToWorldSpace(coords - vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
+    float viewX2 = screenSpaceToWorldSpace(coords + vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
+    return abs(viewX2 - viewX1);
+}
+
 void main(void) {
-    vec2 selfCoords = gl_FragCoord.xy / uTexSize;
+    vec2 invTexSize = 1.0 / uTexSize;
+    vec2 selfCoords = gl_FragCoord.xy * invTexSize;
 
     float angle = angleEdgeCompression(selfCoords);
     float tanAngle = tan(angle);
 
     vec4 result = texture(tCutaway, selfCoords);
+    float resultViewZ = depthToViewZ(uIsOrtho, result.w, uNear, uFar);
+    float resultLinearZ = (resultViewZ - uNear) / (uFar - uNear);
     
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
@@ -77,13 +90,22 @@ void main(void) {
                 continue;                
             }
 
-            vec2 coordDiff = (selfCoords.xy - sampleValue.xy) * uAspectRatio;
-            float dist = length(coordDiff);
-            
-            float cutawayLinearZ = sampleValue.z - dist * slope(tanAngle, sampleValue.z);
+            float seedPixelViewSize = getPixelViewSize(sampleValue.xyz, invTexSize);
+            float slopeStartOffset = uSlopeStartOffset / (seedPixelViewSize * uTexSize.x);
 
-            if (result.x < 0.0 || result.w > cutawayLinearZ) {
-                result = vec4(sampleValue.xyz, cutawayLinearZ);
+            vec2 coordDiff = (selfCoords.xy - sampleValue.xy) * uAspectRatio;
+            float dist = max(length(coordDiff) - slopeStartOffset, 0.0);
+            
+            float seedViewZ = depthToViewZ(uIsOrtho, sampleValue.z, uNear, uFar);
+            float seedLinearZ = (seedViewZ - uNear) / (uFar - uNear);
+            float cutawayLinearZ = seedLinearZ - dist * slope(tanAngle, seedLinearZ);
+
+            if (result.x < 0.0 || resultLinearZ > cutawayLinearZ) {
+                float cutawayViewZ = uNear + (cutawayLinearZ * (uFar - uNear));
+                float cutawayDepth = viewZToDepth(uIsOrtho, cutawayViewZ, uNear, uFar);
+
+                result = vec4(sampleValue.xyz, cutawayDepth);
+                resultLinearZ = cutawayLinearZ;
             }
         }
     }

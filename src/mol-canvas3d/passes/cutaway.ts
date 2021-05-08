@@ -16,7 +16,7 @@ import { WebGLContext } from '../../mol-gl/webgl/context';
 import { createComputeRenderItem } from '../../mol-gl/webgl/render-item';
 import { createComputeRenderable, ComputeRenderable } from '../../mol-gl/renderable';
 import { Texture } from '../../mol-gl/webgl/texture';
-import { Vec2, Vec3, Vec4 } from '../../mol-math/linear-algebra';
+import { Mat4, Vec2, Vec3, Vec4 } from '../../mol-math/linear-algebra';
 import { ValueCell } from '../../mol-util';
 import { quad_vert } from '../../mol-gl/shader/quad.vert';
 import { cutawayJfaStep_frag } from '../../mol-gl/shader/cutaway-jfa-step.frag';
@@ -33,7 +33,7 @@ import { isDebugMode } from '../../mol-util/debug';
 export const CutawayParams = {
     angle: PD.Numeric(45, {min: 0, max: 90, step: 1}),
     borderSize: PD.Numeric(0.05, {min: 0, max: 0.1, step: 0.01}),
-    hullExpansion: PD.Numeric(0, {min: 0, max: 2, step: 0.01}),
+    slopeOffset: PD.Numeric(0, {min: 0, max: 1, step: 0.01}),
 };
 export type CutawayProps = PD.Values<typeof CutawayParams>
 
@@ -68,12 +68,15 @@ const CutawayJfaSchema = {
     ...QuadSchema,
     tCutaway: TextureSpec('texture', 'rgba', 'float', 'nearest'),
     uTexSize: UniformSpec('v2'),
+    uInvProjection: UniformSpec('m4'),
     uViewport: UniformSpec('v4'),
     uStep: UniformSpec('v2'),
     uPMsz: UniformSpec('f'),
     uAngle: UniformSpec('f'),
     uEdgeRegionSize: UniformSpec('f'),
+    uSlopeStartOffset: UniformSpec('f'),
     uAspectRatio: UniformSpec('v2'),
+    uIsOrtho: UniformSpec('f'),
     uNear: UniformSpec('f'),
     uFar: UniformSpec('f'),
 };
@@ -84,12 +87,15 @@ function getCutawayJfaRenderable(ctx: WebGLContext, cutawayTexture: Texture): Cu
         ...QuadValues,
         tCutaway: ValueCell.create(cutawayTexture),
         uTexSize: ValueCell.create(Vec2.create(cutawayTexture.getWidth(), cutawayTexture.getHeight())),
+        uInvProjection: ValueCell.create(Mat4.identity()),
         uViewport: ValueCell.create(Vec4.create(0.0, 0.0, 1.0, 1.0)),
         uStep: ValueCell.create(Vec2.create(0, 0)),
         uPMsz: ValueCell.create(1.0),
         uAngle: ValueCell.create(Math.PI / 3.0),
         uEdgeRegionSize: ValueCell.create(0.0),
+        uSlopeStartOffset: ValueCell.create(0.0),
         uAspectRatio: ValueCell.create(Vec2.create(1.0, 1.0)),
+        uIsOrtho: ValueCell.create(0.0),
         uNear: ValueCell.create(0.0),
         uFar: ValueCell.create(1.0),
     };
@@ -216,10 +222,18 @@ export class CutawayPass {
 
         let PMsz = orthographic ? 0 : (camera.near + camera.far) / (camera.near - camera.far);
 
+        let invProjection = Mat4.identity();
+        Mat4.invert(invProjection, camera.projection);
+
+        ValueCell.updateIfChanged(this.jfaARenderable.values.uInvProjection, invProjection);
+        ValueCell.updateIfChanged(this.jfaBRenderable.values.uInvProjection, invProjection);
+
         ValueCell.updateIfChanged(this.jfaARenderable.values.uPMsz, PMsz);
         ValueCell.updateIfChanged(this.jfaBRenderable.values.uPMsz, PMsz);
 
         ValueCell.updateIfChanged(this.initRenderable.values.uIsOrtho, orthographic);
+        ValueCell.updateIfChanged(this.jfaARenderable.values.uIsOrtho, orthographic);
+        ValueCell.updateIfChanged(this.jfaBRenderable.values.uIsOrtho, orthographic);
         ValueCell.updateIfChanged(this.copyToTargetRenderable.values.uIsOrtho, orthographic);
 
         ValueCell.updateIfChanged(this.initRenderable.values.uNear, camera.near);
@@ -232,12 +246,16 @@ export class CutawayPass {
         ValueCell.updateIfChanged(this.jfaBRenderable.values.uFar, camera.far);
         ValueCell.updateIfChanged(this.copyToTargetRenderable.values.uFar, camera.far);
 
-        let angle = props.angle * Math.PI / 180.0;
+        let angle = Math.max(props.angle * Math.PI / 180.0, 0.001);
         ValueCell.updateIfChanged(this.jfaARenderable.values.uAngle, angle);
         ValueCell.updateIfChanged(this.jfaBRenderable.values.uAngle, angle);
 
         ValueCell.updateIfChanged(this.jfaARenderable.values.uEdgeRegionSize, props.borderSize);
         ValueCell.updateIfChanged(this.jfaBRenderable.values.uEdgeRegionSize, props.borderSize);
+
+        let slopeStartOffset = scene.boundingSphereVisible.radius * props.slopeOffset;
+        ValueCell.updateIfChanged(this.jfaARenderable.values.uSlopeStartOffset, slopeStartOffset);
+        ValueCell.updateIfChanged(this.jfaBRenderable.values.uSlopeStartOffset, slopeStartOffset);
 
         let aspectRatio = this.getScalingRatio(camera, scene);
         ValueCell.update(this.jfaARenderable.values.uAspectRatio, Vec2.copy(this.jfaARenderable.values.uAspectRatio.ref.value, aspectRatio));
@@ -288,7 +306,7 @@ export class CutawayPass {
             view: scene.primitives.view
         };
 
-        renderer.renderDepth(groupLigand, camera, null, null, props.hullExpansion.valueOf());
+        renderer.renderDepth(groupLigand, camera, null, null);
     }
 
     private renderJfa(camera: ICamera, scene: Scene, props: CutawayProps) {

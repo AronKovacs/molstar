@@ -48,7 +48,7 @@ interface Renderer {
     update: (camera: ICamera) => void
 
     renderPick: (group: Scene.Group, camera: ICamera, variant: GraphicsRenderVariant, depthTexture: Texture | null, depthCutawayTexture: Texture | null) => void
-    renderDepth: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthCutawayTexture: Texture | null, hullExpansionSize: number) => void
+    renderDepth: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthCutawayTexture: Texture | null) => void
     renderBlended: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
     renderBlendedOpaque: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
     renderBlendedTransparent: (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null) => void
@@ -244,7 +244,6 @@ namespace Renderer {
             uFogFar: ValueCell.create(10000),
             uFogColor: ValueCell.create(bgColor),
 
-            uHullExpansionSize: ValueCell.create(0),
             uCutaway: ValueCell.create(false),
             uRenderWboit: ValueCell.create(false),
 
@@ -380,7 +379,7 @@ namespace Renderer {
             ValueCell.updateIfChanged(globalUniforms.uTransparentBackground, transparentBackground);
         };
 
-        const updateInternal = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null, renderWboit: boolean, hullExpansionSize: number = 0.0) => {
+        const updateInternal = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, cutawayData: CutawayData | null, renderWboit: boolean) => {
             arrayMapUpsert(sharedTexturesList, 'tDepth', depthTexture || nullDepthTexture);
             arrayMapUpsert(sharedTexturesList, 'tDepthPreCutaway', cutawayData !== null ? (cutawayData.depthPreCutawayTexture || nullDepthCutawayTexture) : nullDepthCutawayTexture);
             arrayMapUpsert(sharedTexturesList, 'tDepthCutaway', cutawayData !== null ? (cutawayData.depthCutawayTexture || nullDepthCutawayTexture) : nullDepthCutawayTexture);
@@ -391,7 +390,6 @@ namespace Renderer {
             ValueCell.update(globalUniforms.uModelViewProjection, Mat4.mul(modelViewProjection, modelView, camera.projection));
             ValueCell.update(globalUniforms.uInvModelViewProjection, Mat4.invert(invModelViewProjection, modelViewProjection));
 
-            ValueCell.updateIfChanged(globalUniforms.uHullExpansionSize, hullExpansionSize);
             ValueCell.updateIfChanged(globalUniforms.uCutaway, cutawayData !== null && cutawayData.depthCutawayTexture !== null);
             ValueCell.updateIfChanged(globalUniforms.uRenderWboit, renderWboit);
 
@@ -421,12 +419,12 @@ namespace Renderer {
             }
         };
 
-        const renderDepth = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthCutawayTexture: Texture | null, hullExpansionSize: number = 0) => {
+        const renderDepth = (group: Scene.Group, camera: ICamera, depthTexture: Texture | null, depthCutawayTexture: Texture | null) => {
             state.disable(gl.BLEND);
             state.enable(gl.DEPTH_TEST);
             state.depthMask(true);
 
-            updateInternal(group, camera, depthTexture, { depthPreCutawayTexture: null, depthCutawayTexture }, false, hullExpansionSize);
+            updateInternal(group, camera, depthTexture, { depthPreCutawayTexture: null, depthCutawayTexture }, false);
 
             const { renderables } = group;
             for (let i = 0, il = renderables.length; i < il; ++i) {

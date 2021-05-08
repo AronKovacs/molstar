@@ -320,7 +320,7 @@ export class DrawPass {
             this.webgl.state.depthMask(true);
             this.webgl.state.clearColor(1, 1, 1, 1);
             this.webgl.gl.clear(this.webgl.gl.COLOR_BUFFER_BIT | this.webgl.gl.DEPTH_BUFFER_BIT);
-            renderer.renderDepth(scene.primitives, camera, null, null, 0);
+            renderer.renderDepth(scene.primitives, camera, null, null);
 
             cutawayData = { depthPreCutawayTexture: this.depthPreCutawayTarget.texture, depthCutawayTexture: this.cutaway.target };
         } else {
@@ -423,7 +423,7 @@ export class DrawPass {
                 this.depthTargetPrimitives.bind();
                 renderer.clear(false);
                 // TODO: this should only render opaque
-                renderer.renderDepth(scene.primitives, camera, null, null, 0);
+                renderer.renderDepth(scene.primitives, camera, null, null);
                 this.colorTarget.bind();
             }
 
@@ -438,7 +438,7 @@ export class DrawPass {
             if (this.depthTargetVolumes) {
                 this.depthTargetVolumes.bind();
                 renderer.clear(false);
-                renderer.renderDepth(scene.volumes, camera, this.depthTexturePrimitives, null, 0);
+                renderer.renderDepth(scene.volumes, camera, this.depthTexturePrimitives, null);
                 this.colorTarget.bind();
             }
 

@@ -30,35 +30,19 @@ attribute float aInstance;
 
 varying vec3 vNormal;
 
-uniform float uHullExpansionSize;
-
 void main() {
     #include assign_group
     #include assign_color_varying
     #include assign_marker_varying
     #include assign_clipping_varying
     #include clip_instance
+    #include assign_position
 
     #ifdef dGeoTexture
         vec3 normal = readFromTexture(tNormal, VertexID, uGeoTexDim).xyz;
     #else
         vec3 normal = aNormal;
     #endif
-
-    // assign_position - begin
-    mat4 model = uModel * aTransform;
-    mat4 modelView = uView * model;
-    #ifdef dGeoTexture
-        vec3 position = readFromTexture(tPosition, VertexID, uGeoTexDim).xyz;
-    #else
-        vec3 position = aPosition;
-    #endif
-    vec4 position4 = vec4(position + normal * uHullExpansionSize, 1.0);
-    vModelPosition = (model * position4).xyz; // for clipping in frag shader
-    vec4 mvPosition = modelView * position4;
-    vViewPosition = mvPosition.xyz;
-    gl_Position = uProjection * mvPosition;
-    // assign_position - end
 
     mat3 normalMatrix = transpose3(inverse3(mat3(modelView)));
     vec3 transformedNormal = normalize(normalMatrix * normalize(normal));
