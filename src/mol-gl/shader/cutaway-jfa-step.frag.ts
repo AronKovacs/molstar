@@ -54,6 +54,14 @@ float angleEdgeCompression(vec2 coords) {
     return uAngle * terms.x * terms.y;
 }
 
+float slopeOffsetEdgeCompression(float slopeOffset, vec2 coords) {
+    if (uEdgeRegionSize == 0.0) {
+        return slopeOffset;
+    }
+    vec2 terms = clamp(normalizedDistanceFromEdges(coords) / uEdgeRegionSize, 0.0, 1.0);
+    return slopeOffset * terms.x * terms.y;
+}
+
 float getPixelViewSize(vec3 coords, vec2 invTexSize) {
     float viewX1 = screenSpaceToWorldSpace(coords - vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
     float viewX2 = screenSpaceToWorldSpace(coords + vec3(invTexSize.x * 0.5, 0.0, 0.0), uInvProjection).x;
@@ -64,7 +72,7 @@ void main(void) {
     vec2 invTexSize = 1.0 / uTexSize;
     vec2 selfCoords = gl_FragCoord.xy * invTexSize;
 
-    float angle = angleEdgeCompression(selfCoords);
+    float angle = max(angleEdgeCompression(selfCoords), 0.001);
     float tanAngle = tan(angle);
 
     vec4 result = texture(tCutaway, selfCoords);
@@ -94,13 +102,13 @@ void main(void) {
             float slopeStartOffset = uSlopeStartOffset / (seedPixelViewSize * uTexSize.x);
 
             vec2 coordDiff = (selfCoords.xy - sampleValue.xy) * uAspectRatio;
-            float dist = max(length(coordDiff) - slopeStartOffset, 0.0);
+            float dist = max(length(coordDiff) - slopeOffsetEdgeCompression(slopeStartOffset, selfCoords), 0.0);
             
             float seedViewZ = depthToViewZ(uIsOrtho, sampleValue.z, uNear, uFar);
             float seedLinearZ = (seedViewZ - uNear) / (uFar - uNear);
             float cutawayLinearZ = seedLinearZ - dist * slope(tanAngle, seedLinearZ);
 
-            if (result.x < 0.0 || resultLinearZ > cutawayLinearZ) {
+            if (result.x < 0.0 || (cutawayLinearZ <= 0.0 && resultLinearZ > cutawayLinearZ)) {
                 float cutawayViewZ = uNear + (cutawayLinearZ * (uFar - uNear));
                 float cutawayDepth = viewZToDepth(uIsOrtho, cutawayViewZ, uNear, uFar);
 

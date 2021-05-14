@@ -16,7 +16,7 @@ import { WebGLContext } from '../../mol-gl/webgl/context';
 import { createComputeRenderItem } from '../../mol-gl/webgl/render-item';
 import { createComputeRenderable, ComputeRenderable } from '../../mol-gl/renderable';
 import { Texture } from '../../mol-gl/webgl/texture';
-import { Mat4, Vec2, Vec3, Vec4 } from '../../mol-math/linear-algebra';
+import { Mat4, Vec2, Vec4 } from '../../mol-math/linear-algebra';
 import { ValueCell } from '../../mol-util';
 import { quad_vert } from '../../mol-gl/shader/quad.vert';
 import { cutawayJfaStep_frag } from '../../mol-gl/shader/cutaway-jfa-step.frag';
@@ -246,7 +246,7 @@ export class CutawayPass {
         ValueCell.updateIfChanged(this.jfaBRenderable.values.uFar, camera.far);
         ValueCell.updateIfChanged(this.copyToTargetRenderable.values.uFar, camera.far);
 
-        let angle = Math.max(props.angle * Math.PI / 180.0, 0.001);
+        let angle = props.angle * Math.PI / 180.0;
         ValueCell.updateIfChanged(this.jfaARenderable.values.uAngle, angle);
         ValueCell.updateIfChanged(this.jfaBRenderable.values.uAngle, angle);
 
@@ -257,39 +257,9 @@ export class CutawayPass {
         ValueCell.updateIfChanged(this.jfaARenderable.values.uSlopeStartOffset, slopeStartOffset);
         ValueCell.updateIfChanged(this.jfaBRenderable.values.uSlopeStartOffset, slopeStartOffset);
 
-        let aspectRatio = this.getScalingRatio(camera, scene);
+        let aspectRatio = Vec2.create(camera.viewport.width / camera.viewport.height, 1);
         ValueCell.update(this.jfaARenderable.values.uAspectRatio, Vec2.copy(this.jfaARenderable.values.uAspectRatio.ref.value, aspectRatio));
         ValueCell.update(this.jfaBRenderable.values.uAspectRatio, Vec2.copy(this.jfaBRenderable.values.uAspectRatio.ref.value, aspectRatio));
-    }
-
-    private getScalingRatio(camera: ICamera, scene: Scene): Vec2 {
-        let distanceToCamera = Vec3.distance(camera.state.position, scene.boundingSphereVisible.center);
-
-        let center = Vec4.create(0, 0, distanceToCamera, 1);
-        let right = Vec4.create(scene.boundingSphereVisible.radius, 0, distanceToCamera, 1);
-        let top = Vec4.create(0, scene.boundingSphereVisible.radius, distanceToCamera, 1);
-
-        // project
-        Vec4.transformMat4(center, center, camera.projection);
-        Vec4.transformMat4(right, right, camera.projection);
-        Vec4.transformMat4(top, top, camera.projection);
-
-        // scale only the relevant coordinates
-        center[0] = center[0] / center[3];
-        center[1] = center[1] / center[3];
-        right[0] = right[0] / right[3];
-        top[1] = top[1] / top[3];
-
-        // distances between points
-        let ratio = Vec2.create(Math.abs(right[0] - center[0]), Math.abs(top[1] - center[1]));
-        // NDC -> screen space
-        Vec2.scale(ratio, ratio, 0.5);
-        // and we want to scale by the inverse
-        Vec2.inverse(ratio, ratio);
-
-        Vec2.set(ratio, 1, 1);
-
-        return ratio;
     }
 
     private renderDepth(renderer: Renderer, camera: ICamera, scene: Scene, props: CutawayProps) {
